@@ -1,8 +1,7 @@
-import { Router } from "express";
-import healthRouter from "./health.js";
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const router: any = Router();
+const router: IRouter = Router();
 
 router.use(healthRouter);
 
