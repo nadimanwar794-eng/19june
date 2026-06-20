@@ -218,6 +218,113 @@ interface Props {
   onToggleDarkMode?: (v: boolean) => void;
 }
 
+// ── IIC × NSTA Badge Position Drag Editor ─────────────────────────────────
+const BadgePosEditor: React.FC<{
+  portrait: { bottom: number; right: number };
+  landscape: { bottom: number; right: number };
+  onChange: (p: { bottom: number; right: number }, l: { bottom: number; right: number }) => void;
+}> = ({ portrait, landscape, onChange }) => {
+  const [pPos, setPPos] = React.useState(portrait);
+  const [lPos, setLPos] = React.useState(landscape);
+  const pRef = useRef<HTMLDivElement>(null);
+  const lRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<'p' | 'l' | null>(null);
+  const pPosRef = useRef(pPos);
+  const lPosRef = useRef(lPos);
+  React.useEffect(() => { pPosRef.current = pPos; }, [pPos]);
+  React.useEffect(() => { lPosRef.current = lPos; }, [lPos]);
+
+  const BADGE_W_PCT = 28;
+  const BADGE_H_PCT = 12;
+
+  const onDown = (mode: 'p' | 'l', e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragging.current = mode;
+  };
+
+  const onMove = (mode: 'p' | 'l', e: React.PointerEvent) => {
+    if (dragging.current !== mode) return;
+    const ref = mode === 'p' ? pRef : lRef;
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const bw = rect.width * BADGE_W_PCT / 100;
+    const bh = rect.height * BADGE_H_PCT / 100;
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width - bw));
+    const y = Math.max(0, Math.min(e.clientY - rect.top, rect.height - bh));
+    const right = Math.round(((rect.width - x - bw) / rect.width) * 100);
+    const bottom = Math.round(((rect.height - y - bh) / rect.height) * 100);
+    if (mode === 'p') setPPos({ bottom, right });
+    else setLPos({ bottom, right });
+  };
+
+  const onUp = () => {
+    dragging.current = null;
+    onChange(pPosRef.current, lPosRef.current);
+  };
+
+  const Frame: React.FC<{ mode: 'p' | 'l'; pos: { bottom: number; right: number }; fRef: React.RefObject<HTMLDivElement>; w: number; h: number; label: string }> =
+    ({ mode, pos, fRef, w, h, label }) => (
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-[9px] font-black uppercase text-slate-500">{label}</span>
+        <div
+          ref={fRef}
+          style={{ position: 'relative', width: w, height: h, background: '#0f0f0f', borderRadius: 6, overflow: 'hidden', border: '2px solid #374151', cursor: 'default', touchAction: 'none' }}
+        >
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#1a1a2e,#16213e 60%,#0f3460)' }} />
+          {/* Mock YouTube controls bar */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: h * 0.15, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+            <div style={{ width: 10, height: 7, background: '#ff0000', borderRadius: 1, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 0, height: 0, borderTop: '2.5px solid transparent', borderBottom: '2.5px solid transparent', borderLeft: '4px solid white', marginLeft: 1 }} />
+            </div>
+            <div style={{ flex: 1, height: 2, background: 'rgba(255,255,255,0.25)', borderRadius: 1 }}>
+              <div style={{ width: '12%', height: '100%', background: '#ff0000', borderRadius: 1 }} />
+            </div>
+            <span style={{ fontSize: 6, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>▶ YouTube</span>
+          </div>
+          {/* Draggable Badge */}
+          <div
+            onPointerDown={(e) => onDown(mode, e)}
+            onPointerMove={(e) => onMove(mode, e)}
+            onPointerUp={onUp}
+            style={{
+              position: 'absolute',
+              bottom: `${pos.bottom}%`,
+              right: `${pos.right}%`,
+              background: 'rgba(8,8,18,0.95)',
+              border: '1px solid rgba(99,102,241,0.7)',
+              borderRadius: 3,
+              padding: '2px 6px',
+              display: 'flex', alignItems: 'center', gap: 2,
+              cursor: 'grab',
+              userSelect: 'none',
+              touchAction: 'none',
+              zIndex: 10,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 1px 6px rgba(0,0,0,0.5)',
+            }}
+          >
+            <span style={{ fontSize: 7, fontWeight: 900, color: '#a5b4fc' }}>IIC</span>
+            <span style={{ fontSize: 6, color: 'rgba(165,180,252,0.55)' }}>×</span>
+            <span style={{ fontSize: 7, fontWeight: 900, color: '#818cf8' }}>NSTA</span>
+          </div>
+        </div>
+        <span style={{ fontSize: 9, color: '#6366f1', fontWeight: 700 }}>↕ {pos.bottom}% &nbsp; ↔ {pos.right}%</span>
+      </div>
+    );
+
+  return (
+    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 space-y-3">
+      <label className="text-xs font-black uppercase text-indigo-700 block">🎯 IIC × NSTA Badge Position</label>
+      <p className="text-[10px] text-indigo-600">Badge ko drag karke YouTube logo ke exact upar set karo. Portrait aur Landscape ke liye alag-alag save hoga.</p>
+      <div className="flex flex-wrap gap-5">
+        <Frame mode="p" pos={pPos} fRef={pRef} w={120} h={213} label="📱 Portrait" />
+        <Frame mode="l" pos={lPos} fRef={lRef} w={240} h={135} label="🖥 Landscape" />
+      </div>
+    </div>
+  );
+};
+
 export const AdminDashboard: React.FC<Props> = (props) => {
   return <AdminDashboardInner {...props} />;
 };
@@ -6414,6 +6521,51 @@ const AdminDashboardInner: React.FC<Props> = ({ onNavigate, settings, onUpdateSe
 
                           <div><label className="text-xs font-bold uppercase text-slate-600">App Name (Long)</label><input type="text" value={localSettings.appName} onChange={e => setLocalSettings({...localSettings, appName: e.target.value})} className="w-full p-3 border rounded-xl" placeholder="IIC" /></div>
                           <div><label className="text-xs font-bold uppercase text-slate-600">App Logo (Image URL)</label><input type="text" value={localSettings.appLogo || ''} onChange={e => setLocalSettings({...localSettings, appLogo: e.target.value})} className="w-full p-3 border rounded-xl" placeholder="https://example.com/logo.png" /></div>
+
+                          {/* IIC × NSTA Badge Position Editor */}
+                          <BadgePosEditor
+                            portrait={localSettings.iicNstaBadgePos?.portrait ?? { bottom: 5, right: 2 }}
+                            landscape={localSettings.iicNstaBadgePos?.landscape ?? { bottom: 5, right: 2 }}
+                            onChange={(p, l) => setLocalSettings({ ...localSettings, iicNstaBadgePos: { portrait: p, landscape: l } })}
+                          />
+
+                          {/* Video Player Button Labels */}
+                          <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-200 rounded-xl p-4">
+                              <h5 className="text-xs font-black uppercase text-indigo-700 mb-3 flex items-center gap-2">
+                                  <span>🎬</span> Video Player — Button Labels
+                              </h5>
+                              <p className="text-[10px] text-indigo-600 mb-3">
+                                  Portrait mode mein badge button aur Landscape mode mein "go-portrait" button ka text change karein. Button ka size same rahega, text auto-fit hoga.
+                              </p>
+                              <div className="grid grid-cols-1 gap-3">
+                                  <div>
+                                      <label className="text-xs font-bold uppercase text-slate-600">
+                                          📱 Portrait Badge Button (default: IIC×NSTA)
+                                      </label>
+                                      <input
+                                          type="text"
+                                          value={localSettings.playerBadgeLabel ?? ''}
+                                          onChange={e => setLocalSettings({ ...localSettings, playerBadgeLabel: e.target.value })}
+                                          className="w-full p-3 border rounded-xl mt-1"
+                                          placeholder="IIC×NSTA"
+                                          maxLength={30}
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold uppercase text-slate-600">
+                                          🔄 Landscape "Go Portrait" Button (default: Portrait)
+                                      </label>
+                                      <input
+                                          type="text"
+                                          value={localSettings.playerFsButtonLabel ?? ''}
+                                          onChange={e => setLocalSettings({ ...localSettings, playerFsButtonLabel: e.target.value })}
+                                          className="w-full p-3 border rounded-xl mt-1"
+                                          placeholder="Portrait"
+                                          maxLength={30}
+                                      />
+                                  </div>
+                              </div>
+                          </div>
                           <div className="grid grid-cols-2 gap-3">
                               <div><label className="text-xs font-bold uppercase text-slate-600">App Short Name</label><input type="text" value={localSettings.appShortName || 'IIC'} onChange={e => setLocalSettings({...localSettings, appShortName: e.target.value})} className="w-full p-3 border rounded-xl" placeholder="IIC" /></div>
                               <div><label className="text-xs font-bold uppercase text-slate-600">AI Assistant Name</label><input type="text" value={localSettings.aiName || 'IIC AI'} onChange={e => setLocalSettings({...localSettings, aiName: e.target.value})} className="w-full p-3 border rounded-xl" placeholder="IIC AI" /></div>

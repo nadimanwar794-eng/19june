@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDebounce } from '../utils/useDebounce';
 import { LessonContent, User, SystemSettings, UsageHistoryEntry } from '../types';
-import { BookOpen, Calendar, ChevronDown, ChevronUp, Trash2, Search, FileText, CheckCircle2, Lock, AlertCircle, Folder, Download, ChevronRight, Play, X as XIcon, Star, Volume2, Square, Target, Sparkles } from 'lucide-react';
+import { BookOpen, Calendar, ChevronDown, ChevronUp, Trash2, Search, FileText, CheckCircle2, Lock, AlertCircle, Folder, Download, ChevronRight, Play, X as XIcon, Star, Volume2, Square, Target, Sparkles, CreditCard, LogIn } from 'lucide-react';
 import { getMistakeBank, removeMistakes, clearMistakeBank, MistakeEntry } from '../utils/mistakeBank';
 import { getMistakeSessions, MistakeSession } from '../utils/mistakeAnalytics';
 import { MistakePracticeView } from './MistakePracticeView';
@@ -470,19 +470,33 @@ export const HistoryPage: React.FC<Props> = ({ user, onUpdateUser, settings, ini
             onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})}
         />
         
-        <div className="flex items-center gap-3 mb-6">
-            {onBack && (
-                <button
-                    onClick={onBack}
-                    className="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all shrink-0"
-                >
-                    <ChevronDown size={18} className="rotate-90" />
-                </button>
-            )}
-            <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                 <FileText className="text-blue-600" /> Downloads & History
-            </h3>
-        </div>
+        {(() => {
+            const tabMeta: Record<string, { label: string; icon: React.ReactNode }> = {
+                READING:       { label: 'Reading History',   icon: <BookOpen className="text-emerald-600" /> },
+                FLASHCARDS:    { label: 'Flashcard Activity', icon: <Layers className="text-violet-600" /> },
+                MISTAKE:       { label: 'My Mistakes',       icon: <Target className="text-rose-500" /> },
+                OFFLINE:       { label: 'Downloads',         icon: <Download className="text-blue-600" /> },
+                STARRED:       { label: 'Important Notes',   icon: <Star className="text-amber-500" fill="currentColor" /> },
+                LOGIN_HISTORY: { label: 'Login History',     icon: <LogIn className="text-indigo-500" /> },
+                CREDIT_HISTORY:{ label: 'Credit History',    icon: <CreditCard className="text-orange-500" /> },
+            };
+            const meta = tabMeta[activeTab] ?? { label: 'Downloads & History', icon: <FileText className="text-blue-600" /> };
+            return (
+                <div className="flex items-center gap-3 mb-6">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all shrink-0"
+                        >
+                            <ChevronDown size={18} className="rotate-90" />
+                        </button>
+                    )}
+                    <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                        {meta.icon} {meta.label}
+                    </h3>
+                </div>
+            );
+        })()}
 
         {activeTab === 'READING' && (
             <ReadingProgressSection

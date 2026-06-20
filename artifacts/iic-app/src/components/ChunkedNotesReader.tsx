@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Volume2, Square, BookOpen, Star, Palette, Check, Type, RotateCcw, Search, Monitor, X, LayoutGrid, MoreVertical, ChevronRight, WifiOff } from 'lucide-react';
+import { Volume2, Square, BookOpen, Star, Palette, Check, Type, RotateCcw, Search, Monitor, X, LayoutGrid, MoreVertical, ChevronRight, WifiOff, Flame } from 'lucide-react';
 import { rotateScreen, isDesktopModeOn, setDesktopMode } from '../utils/displayPrefs';
 import { speakText, stopSpeech } from '../utils/textToSpeech';
 import { splitIntoTopics, NotesTopic as Topic } from '../utils/notesSplitter';
@@ -10,7 +10,7 @@ import { ReadingScoreSession, ReadingScoreState, ReadingScoreConfig } from '../u
 import { ReadingScoreHUD } from './ReadingScoreHUD';
 import { getLevelInfo, LEVEL_INFO } from '../utils/levelSystem';
 
-const FONT_SIZES = [13, 15, 17, 20] as const;
+const FONT_SIZES = [13, 15, 17, 20, 24, 28, 32, 36, 40] as const;
 const FONT_SIZE_KEY = 'nst_reading_font_size';
 const FONT_FAMILY_KEY = 'nst_reading_font_family';
 const FONT_WEIGHT_KEY = 'nst_reading_font_weight';
@@ -38,7 +38,7 @@ const getStoredFontFamilyId = (): string | null => {
 const getStoredFontIdx = (): number => {
   try {
     const v = parseInt(localStorage.getItem(FONT_SIZE_KEY) || '1', 10);
-    return isNaN(v) || v < 0 || v > 3 ? 1 : v;
+    return isNaN(v) || v < 0 || v > 8 ? 1 : v;
   } catch { return 1; }
 };
 
@@ -183,10 +183,18 @@ interface Props {
   isSavedOffline?: boolean;
   /** Reading score config — when provided, activates time-based score tracking with HUD */
   readingScoreConfig?: ReadingScoreConfig;
+  /** True if the current user is an admin (ADMIN or SUB_ADMIN role). */
+  isAdmin?: boolean;
+  /** When true and isAdmin, show Important Mark 2 button instead of the regular star button. */
+  useImportantMark2?: boolean;
+  /** Returns true if a topic text has been marked with Important Mark 2 by admin. */
+  isMarked2?: (text: string) => boolean;
+  /** Called when admin taps the Important Mark 2 button on a topic. */
+  onMark2Toggle?: (text: string) => void;
 }
 
 
-export const ChunkedNotesReader: React.FC<Props> = ({ content, className, language = 'hi-IN', topBarLabel, autoStart, onComplete, onReadingStart, hideTopBar, initialIndex, onPositionChange, noteKey, isStarred, onStarToggle, searchQuery, getStarCount, textColorOverride, preferChunkMode, onDesktopModeChange, hideDesktopToggle, suppressStickyControls, htmlContent, isUltraUser, ultraHtmlRemaining, userCredits = 0, htmlUnlockCost = 5, onSpendCredits, onHtmlOpen, onUpgradeClick, isBasicUser = false, basicHtmlRemaining = 0, onHtmlViewChange, onMoreOptions, triggerControlsRef, hideInline3dot, onBack, onSaveOffline, isSavedOffline, readingScoreConfig }) => {
+export const ChunkedNotesReader: React.FC<Props> = ({ content, className, language = 'hi-IN', topBarLabel, autoStart, onComplete, onReadingStart, hideTopBar, initialIndex, onPositionChange, noteKey, isStarred, onStarToggle, searchQuery, getStarCount, textColorOverride, preferChunkMode, onDesktopModeChange, hideDesktopToggle, suppressStickyControls, htmlContent, isUltraUser, ultraHtmlRemaining, userCredits = 0, htmlUnlockCost = 5, onSpendCredits, onHtmlOpen, onUpgradeClick, isBasicUser = false, basicHtmlRemaining = 0, onHtmlViewChange, onMoreOptions, triggerControlsRef, hideInline3dot, onBack, onSaveOffline, isSavedOffline, readingScoreConfig, isAdmin, useImportantMark2, isMarked2, onMark2Toggle }) => {
   const topics = useMemo(() => splitIntoTopics(content), [content]);
 
   // ── Strips [span_N](start_span) / [span_N](end_span) TTS markers ──
@@ -790,7 +798,7 @@ export const ChunkedNotesReader: React.FC<Props> = ({ content, className, langua
     const sync = () => {
       try {
         const v = parseInt(localStorage.getItem(FONT_SIZE_KEY) || '1', 10);
-        if (!isNaN(v) && v >= 0 && v <= 3) setFontIdx(v);
+        if (!isNaN(v) && v >= 0 && v <= 8) setFontIdx(v);
       } catch {}
       try {
         const id = localStorage.getItem(FONT_FAMILY_KEY);
@@ -1736,6 +1744,7 @@ export const ChunkedNotesReader: React.FC<Props> = ({ content, className, langua
           // Whole topic is a button so taps anywhere on the line start/stop TTS.
           const starred = isStarred ? isStarred(topic.text) : false;
           const starCount = getStarCount ? getStarCount(topic.text) : 0;
+          const marked2 = isMarked2 ? isMarked2(topic.text) : false;
           return (
             <div
               key={`tp-${idx}`}
@@ -1743,9 +1752,13 @@ export const ChunkedNotesReader: React.FC<Props> = ({ content, className, langua
               className={`group relative w-full rounded-lg transition-colors ${
                 isActive
                   ? 'bg-yellow-50 ring-2 ring-yellow-300'
-                  : starred
-                    ? 'bg-amber-50'
-                    : 'hover:bg-slate-50'
+                  : (marked2 && starred)
+                    ? 'bg-purple-50 ring-1 ring-purple-300'
+                    : marked2
+                      ? 'bg-orange-50 ring-1 ring-orange-200'
+                      : starred
+                        ? 'bg-amber-50'
+                        : 'hover:bg-slate-50'
               }`}
             >
               <button
@@ -1799,7 +1812,8 @@ export const ChunkedNotesReader: React.FC<Props> = ({ content, className, langua
                   on already-starred lines still indicates "saved to Important
                   Notes". To un-star later, tap the line to start TTS again,
                   then tap the star. ~28px hit area for easy tapping. */}
-              {onStarToggle && isActive && (
+              {/* Regular star button — hidden when admin is in Mark 2 mode */}
+              {onStarToggle && isActive && !(isAdmin && useImportantMark2) && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1818,6 +1832,28 @@ export const ChunkedNotesReader: React.FC<Props> = ({ content, className, langua
                   title={starred ? 'Tap to un-star' : 'Tap to add to Important Notes'}
                 >
                   <Star size={15} className={starred ? 'fill-amber-500' : ''} />
+                </button>
+              )}
+              {/* Important Mark 2 button — only visible to admins when Mark 2 mode is ON */}
+              {isAdmin && useImportantMark2 && onMark2Toggle && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try { if (navigator.vibrate) navigator.vibrate(40); } catch {}
+                    onMark2Toggle(topic.text);
+                  }}
+                  onPointerDown={(e) => { e.stopPropagation(); }}
+                  style={{ width: '28px', height: '28px', padding: 0 }}
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full inline-flex items-center justify-center transition-all shadow-sm border-2 z-10 ${
+                    marked2
+                      ? 'text-orange-600 bg-orange-100 border-orange-400 hover:bg-orange-200'
+                      : 'text-orange-400 bg-white border-orange-200 hover:bg-orange-50'
+                  }`}
+                  aria-label={marked2 ? 'Remove Important Mark 2' : 'Important Mark 2'}
+                  title={marked2 ? 'Tap to remove Important Mark 2' : 'Tap to mark as Important 2 (changes background)'}
+                >
+                  <Flame size={13} className={marked2 ? 'fill-orange-500' : ''} />
                 </button>
               )}
             </div>

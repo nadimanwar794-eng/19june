@@ -363,7 +363,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     storage.getItem<StudentTab>('nst_active_student_tab').then(saved => {
-        if (saved) setStudentTab(saved);
+        // Always start from HOME — never restore a deep content view on app open
+        if (saved && saved !== 'COURSES' && saved !== 'PDF' && saved !== 'MCQ' && saved !== 'VIDEO' && saved !== 'AUDIO') {
+            setStudentTab(saved);
+        }
     });
   }, []);
 
@@ -1162,7 +1165,7 @@ const App: React.FC = () => {
             return; 
         }
 
-        let initialView = (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') ? 'ADMIN_DASHBOARD' : 'STUDENT_DASHBOARD';
+        let initialView = 'STUDENT_DASHBOARD';
         
         if ((user.role === 'STUDENT' || user.role === 'TEACHER') && !user.profileCompleted) {
              initialView = 'ONBOARDING';
@@ -1470,12 +1473,16 @@ const App: React.FC = () => {
     setState(prev => ({
       ...prev,
       user,
-      view: ((user.role === 'ADMIN' || user.role === 'SUB_ADMIN') ? 'ADMIN_DASHBOARD' : 'STUDENT_DASHBOARD') as any,
+      view: 'STUDENT_DASHBOARD' as any,
       selectedBoard: user.board || null,
       selectedClass: user.classLevel || null,
       selectedStream: user.stream || null,
       language: user.board === 'BSEB' ? 'Hindi' : 'English',
     }));
+
+    if (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') {
+      setTimeout(() => setAlertConfig({ isOpen: true, message: `👋 Welcome, ${user.name || 'Admin'}!\n\nAap Student Dashboard pe hain.\nAdmin Panel ke liye Profile → Admin Panel pe jayein.` }), 600);
+    }
   };
 
   const [logoutPending, setLogoutPending] = useState(false);
@@ -2406,11 +2413,7 @@ const App: React.FC = () => {
 
   // --- SAFE NAVIGATION LOGIC ---
   const goHome = () => {
-     if (state.user?.role === 'STUDENT' || state.originalAdmin) {
-         setState(prev => ({...prev, view: 'STUDENT_DASHBOARD'}));
-     } else if (state.user?.role === 'ADMIN') {
-         setState(prev => ({...prev, view: 'ADMIN_DASHBOARD'}));
-     }
+     setState(prev => ({...prev, view: 'STUDENT_DASHBOARD'}));
   };
 
   const handlePopupClose = (type: string) => {
@@ -2526,13 +2529,12 @@ const App: React.FC = () => {
       if (prev.view === 'STREAMS') return { ...prev, view: 'CLASSES', selectedStream: null };
       if (prev.view === 'CLASSES') return { ...prev, view: 'BOARDS', selectedClass: null };
 
-      // 4. Boards -> Dashboard or Admin
+      // 4. Boards -> Dashboard
       if (prev.view === 'BOARDS') {
-          const nextView = prev.user?.role === 'ADMIN' ? 'ADMIN_DASHBOARD' : 'STUDENT_DASHBOARD';
-          return { ...prev, view: nextView as any, selectedBoard: null };
+          return { ...prev, view: 'STUDENT_DASHBOARD' as any, selectedBoard: null };
       }
 
-      return { ...prev, view: prev.user?.role === 'ADMIN' ? 'ADMIN_DASHBOARD' as any : 'STUDENT_DASHBOARD' as any };
+      return { ...prev, view: 'STUDENT_DASHBOARD' as any };
     });
   };
 
@@ -2762,7 +2764,7 @@ const App: React.FC = () => {
       {!isFullScreen && state.view !== 'STUDENT_DASHBOARD' && !isLessonImmersive && (
       <header className="bg-white sticky top-0 z-30 shadow-sm border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-           <div onClick={() => setState(prev => ({ ...prev, view: (state.user?.role === 'ADMIN' || state.user?.role === 'SUB_ADMIN') ? 'ADMIN_DASHBOARD' : 'STUDENT_DASHBOARD' as any }))} className="flex items-center gap-2 cursor-pointer">
+           <div onClick={() => setState(prev => ({ ...prev, view: 'STUDENT_DASHBOARD' as any }))} className="flex items-center gap-2 cursor-pointer">
                <div className="flex items-center gap-3">
                  {state.settings.appLogo ? (
                    <img
@@ -2906,12 +2908,21 @@ const App: React.FC = () => {
                           ['PDF_FREE','PDF_PREMIUM','PDF_ULTRA','PDF_VIEWER'].includes(state.lessonContent.type) ||
                           (_lcIsUrl && !['VIDEO_LECTURE','MCQ_ANALYSIS','MCQ_SIMPLE','WEEKLY_TEST'].includes(state.lessonContent.type))
                         );
-                        const _curIdx = _isPdfContent ? state.chapters.findIndex(c => c.id === state.selectedChapter?.id) : -1;
+                        const _isVideoContent = state.lessonContent && (
+                          state.lessonContent.type === 'VIDEO_LECTURE' ||
+                          (_lcIsUrl && (
+                            _lcVal.includes('youtube') || _lcVal.includes('youtu.be') ||
+                            _lcVal.includes('drive.google.com') || _lcVal.includes('notebooklm')
+                          ))
+                        );
+                        const _curIdx = state.chapters.findIndex(c => c.id === state.selectedChapter?.id);
                         const _nextChapter = _curIdx >= 0 && _curIdx < state.chapters.length - 1 ? state.chapters[_curIdx + 1] : null;
                         const _pdfContentType = (['PDF_FREE','PDF_PREMIUM','PDF_ULTRA','PDF_VIEWER'].includes(state.lessonContent?.type || ''))
                           ? state.lessonContent!.type as any
                           : 'PDF_FREE';
-                        const _handleNextPdf = _nextChapter ? () => onChapterClick(_nextChapter, _pdfContentType) : undefined;
+                        const _handleNextPdf = (_isPdfContent && _nextChapter) ? () => onChapterClick(_nextChapter, _pdfContentType) : undefined;
+                        const _handleNextVideo = (_isVideoContent && _nextChapter) ? () => onChapterClick(_nextChapter, state.lessonContent!.type as any) : undefined;
+                        const _handleNext = _handleNextVideo || _handleNextPdf;
                         return (
                           <LessonView
                               content={state.lessonContent}
@@ -2927,7 +2938,7 @@ const App: React.FC = () => {
                               onLaunchContent={(c: any) => handleContentGeneration(c.isPremium ? 'NOTES_PREMIUM' : 'NOTES_HTML_FREE', undefined, false, c)}
                               onToggleAutoTts={handleToggleAutoTts}
                               onImmersiveChange={setIsLessonImmersive}
-                              onNext={_handleNextPdf}
+                              onNext={_handleNext}
                               nextTitle={_nextChapter?.title}
                           />
                         );

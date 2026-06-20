@@ -140,10 +140,10 @@ export const SubjectSelection: React.FC<Props> = ({
           </button>
           <div>
             <h2 className="text-2xl font-bold" style={{ color: tierHeaderColor }}>
-              {isCompetition ? 'Competition Books' : stream ? `${stream} Subjects` : `Class ${classLevel} Subjects`}
+              {isCompetition ? 'Competition Books' : `Class ${classLevel} Subjects`}
             </h2>
             <p className="text-sm mt-0.5" style={{ color: `${tierHeaderColor}99` }}>
-              {isCompetition ? 'Select a book to start reading' : 'Select a subject to view chapters'}
+              {isCompetition ? 'Ek book chunein padhne ke liye' : `Class ${classLevel} ka subject chunein`}
             </p>
           </div>
         </div>

@@ -703,6 +703,13 @@ export interface SystemSettings {
   };
   playerBrandingText?: string; // NEW: Custom Video Player Overlay Text
   playerBlockShare?: boolean; // NEW: Block Share
+  iicNstaBadgePos?: {
+    portrait?: { bottom: number; right: number };
+    landscape?: { bottom: number; right: number };
+    fsButton?:  { bottom: number; right: number };
+  }; // Admin-saved badge position (% from edge) for portrait & landscape
+  playerBadgeLabel?: string;    // Text shown on the IIC×NSTA badge button (default: "IIC×NSTA")
+  playerFsButtonLabel?: string; // Text shown on the landscape "go-portrait" button (default: "Portrait")
   appLogo?: string; // NEW: Base64 Logo Image
   syllabusType?: 'SCHOOL' | 'COMPETITIVE' | 'DUAL'; // Updated: DUAL support
   footerText?: string; // NEW: Customized footer text
