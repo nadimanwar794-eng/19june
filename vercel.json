@@ -1,0 +1,8 @@
+{
+  "framework": null,
+  "buildCommand": "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/iic-app run build",
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" }
+  ]
+}
