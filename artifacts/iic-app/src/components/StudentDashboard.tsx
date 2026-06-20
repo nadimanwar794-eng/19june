@@ -1,6 +1,5 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { CustomPlayer } from './CustomPlayer';
 import { createPortal } from "react-dom";
 import { FeatureHints, FeatureTipsList } from "./FeatureHints";
 import { TopBarEffectsLayer } from "../utils/topBarEffects";
@@ -1961,19 +1960,6 @@ export const StudentDashboard: React.FC<Props> = ({
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isTopBarHidden, setIsTopBarHidden] = useState(false);
 
-  // ── ADMIN: Save NSTA badge position to Firebase ─────────────────────────────
-  const handleBadgePosChange = useCallback(async (pos: { portrait: { bottom: number; right: number }; landscape: { bottom: number; right: number }; fsButton: { bottom: number; right: number } }) => {
-    try {
-      await Promise.all([
-        updateDoc(doc(db, 'config', 'system_settings'), { iicNstaBadgePos: pos }),
-        set(ref(rtdb, 'system_settings/iicNstaBadgePos'), pos),
-      ]);
-    } catch (err) {
-      console.error('Badge pos save failed', err);
-    }
-  }, []);
-  // ────────────────────────────────────────────────────────────────────────────
-
   // Real-time content stats from Firebase content_index: key = "{board}_{classLevel}"
   const [classContentStats, setClassContentStats] = useState<Record<string, ContentTypeStats>>({});
   // Full raw index per class for subject-level breakdown: key = "{board}_{classLevel}"
@@ -2670,11 +2656,9 @@ export const StudentDashboard: React.FC<Props> = ({
     if (!hwActiveHwId) setHwImmersive(false);
   }, [hwActiveHwId]);
   const [hwHtmlTtsPlaying, setHwHtmlTtsPlaying] = useState(false);
-  const [noteZoom, setNoteZoom] = useState<number>(() => {
-    try { const v = parseFloat(localStorage.getItem('nst_note_zoom') || ''); return (v >= 0.6 && v <= 1.8) ? v : 1.0; } catch { return 1.0; }
-  });
-  const zoomIn  = () => setNoteZoom(z => { const n = Math.min(1.8, parseFloat((z + 0.1).toFixed(1))); try { localStorage.setItem('nst_note_zoom', String(n)); } catch {} return n; });
-  const zoomOut = () => setNoteZoom(z => { const n = Math.max(0.6, parseFloat((z - 0.1).toFixed(1))); try { localStorage.setItem('nst_note_zoom', String(n)); } catch {} return n; });
+  const [noteZoom, setNoteZoom] = useState<number>(1.0);
+  const zoomIn  = () => setNoteZoom(z => Math.min(1.8, parseFloat((z + 0.1).toFixed(1))));
+  const zoomOut = () => setNoteZoom(z => Math.max(0.6, parseFloat((z - 0.1).toFixed(1))));
   // ── Profile TTS settings state ──
   const [profileTtsVoices, setProfileTtsVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [profileTtsSelectedUri, setProfileTtsSelectedUri] = useState<string>(() => { try { return localStorage.getItem('nst_preferred_voice_uri') || ''; } catch { return ''; } });
@@ -5774,7 +5758,7 @@ export const StudentDashboard: React.FC<Props> = ({
               </button>
             )}
             {/* Sticky header — hidden in read mode so ChunkedNotesReader slim bar acts as the header */}
-            <div className={`text-white px-4 py-3 flex items-center gap-2 shrink-0 ${hwImmersive || isLandscape || (effectiveMode === 'notes' && hwNotesViewMode === 'chunk') ? 'hidden' : ''}`} style={{ background: tierTheme.topBarGrad }}>
+            <div className={`text-white px-4 py-3 flex items-center gap-2 shrink-0 ${hwImmersive || (effectiveMode === 'notes' && hwNotesViewMode === 'chunk') ? 'hidden' : ''}`} style={{ background: tierTheme.topBarGrad }}>
               <button onClick={goBack} className="bg-white/20 hover:bg-white/30 p-2 rounded-full shrink-0 transition-colors">
                 <ChevronRight size={18} className="rotate-180" />
               </button>
@@ -5849,16 +5833,6 @@ export const StudentDashboard: React.FC<Props> = ({
                   <LayoutGrid size={14} />
                 </button>
               )}
-              {/* Rotate button — only in video mode */}
-              {effectiveMode === 'video' && (
-                <button
-                  onClick={handleRotate}
-                  className={`w-8 h-8 flex items-center justify-center rounded-xl border transition-all active:scale-90 shrink-0 ${isLandscape ? 'bg-emerald-500/30 border-emerald-400/50 text-emerald-300' : 'bg-white/15 border-white/25 text-white'}`}
-                  title="Screen Rotate"
-                >
-                  <RotateCcw size={14} />
-                </button>
-              )}
               <span className="bg-white/20 text-white text-[11px] font-black px-2.5 py-1 rounded-full shrink-0">
                 {flatIdx + 1}/{filteredHw.length}
               </span>
@@ -5922,9 +5896,30 @@ export const StudentDashboard: React.FC<Props> = ({
 
             {/* VIDEO PAGE */}
             {effectiveMode === 'video' && hasVideo && (
-              <div className={`flex-1 relative bg-black overflow-hidden ${!isLandscape ? 'pb-[72px]' : ''}`}>
-                <div style={{ position: 'absolute', inset: 0, bottom: isLandscape ? 0 : 72 }}>
-                  <CustomPlayer videoUrl={activeHw.videoUrl!} onBack={goBack} onBrandingClick={() => setHwImmersive(v => !v)} badgePos={settings?.iicNstaBadgePos} isAdmin={_isAdminUser} onBadgePosChange={handleBadgePosChange} badgeLabel={settings?.playerBadgeLabel} fsButtonLabel={settings?.playerFsButtonLabel} />
+              <div className="flex-1 flex flex-col bg-black overflow-hidden pb-[72px]">
+                <div className="flex-1 relative">
+                  <iframe
+                    src={activeHw.videoUrl!.includes('drive.google.com')
+                      ? formatDriveLink(activeHw.videoUrl!)
+                      : formatVideoEmbed(activeHw.videoUrl!)}
+                    className="absolute inset-0 w-full h-full border-none"
+                    allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+                    title="Video"
+                  />
+                  {/* Targeted blocker — only covers the top-right "Open in Drive" button */}
+                  <div
+                    className="absolute z-10"
+                    style={{ top: 0, right: 0, width: '56px', height: '56px', pointerEvents: 'all', background: 'transparent', cursor: 'not-allowed' }}
+                    onClickCapture={e => { e.preventDefault(); e.stopPropagation(); }}
+                    onMouseDownCapture={e => { e.preventDefault(); e.stopPropagation(); }}
+                    onTouchStartCapture={e => { e.preventDefault(); e.stopPropagation(); }}
+                    onContextMenu={e => e.preventDefault()}
+                  />
+                </div>
+                <div className="shrink-0 px-4 py-2 bg-gray-900">
+                  <p className="text-white/60 text-[11px] font-bold text-center">🔒 Video app ke andar chal raha hai</p>
                 </div>
               </div>
             )}
@@ -5978,7 +5973,7 @@ export const StudentDashboard: React.FC<Props> = ({
             {effectiveMode !== 'choose' && effectiveMode !== 'video' && effectiveMode !== 'audio' && (
             <div
               ref={hwScrollContainerRef}
-              className={`flex-1 overflow-y-auto ${!hwImmersive && !isLandscape ? 'pb-[72px]' : ''}`}
+              className={`flex-1 overflow-y-auto ${!hwImmersive ? 'pb-[72px]' : ''}`}
               onScroll={(e) => {
                 const t = e.currentTarget;
                 const max = t.scrollHeight - t.clientHeight;
@@ -6262,24 +6257,13 @@ export const StudentDashboard: React.FC<Props> = ({
                             : <Play size={18} className="text-rose-400 shrink-0" />}
                           <span className="text-white font-bold text-sm truncate">{hwFullscreenMedia.title}</span>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0 ml-2">
-                          {hwFullscreenMedia.type === 'video' && (
-                            <button
-                              onClick={handleRotate}
-                              className={`w-8 h-8 flex items-center justify-center rounded-xl border transition-all active:scale-90 ${isLandscape ? 'bg-emerald-500/30 border-emerald-400/50 text-emerald-300' : 'bg-white/15 border-white/25 text-white'}`}
-                              title="Screen Rotate"
-                            >
-                              <RotateCcw size={14} />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setHwFullscreenMedia(null)}
-                            className="text-white p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all"
-                            aria-label="Close"
-                          >
-                            <X size={20} />
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => setHwFullscreenMedia(null)}
+                          className="text-white p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all shrink-0 ml-2"
+                          aria-label="Close"
+                        >
+                          <X size={20} />
+                        </button>
                       </div>
 
                       {/* Content */}
@@ -6313,9 +6297,16 @@ export const StudentDashboard: React.FC<Props> = ({
                         </div>
                       ) : (
                         <div className="flex-1 relative bg-black">
-                          <div style={{ position: 'absolute', inset: 0 }}>
-                            <CustomPlayer videoUrl={hwFullscreenMedia.url} onBack={goBack} onBrandingClick={() => setHwImmersive(v => !v)} badgePos={settings?.iicNstaBadgePos} isAdmin={_isAdminUser} onBadgePosChange={handleBadgePosChange} badgeLabel={settings?.playerBadgeLabel} fsButtonLabel={settings?.playerFsButtonLabel} />
-                          </div>
+                          <iframe
+                            src={hwFullscreenMedia.url.includes('drive.google.com')
+                              ? formatDriveLink(hwFullscreenMedia.url)
+                              : formatVideoEmbed(hwFullscreenMedia.url)}
+                            className="absolute inset-0 w-full h-full border-none"
+                            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                            allowFullScreen
+                            sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+                            title="Video"
+                          />
                         </div>
                       )}
                     </div>
@@ -6747,10 +6738,10 @@ export const StudentDashboard: React.FC<Props> = ({
             </div>
             )}
 
-            {/* Floating FAB — tap directly to toggle Focus Mode (hidden in video mode — IIC×NSTA button handles it) */}
-            {effectiveMode !== 'video' && <button
+            {/* Floating FAB — tap directly to toggle Focus Mode */}
+            <button
               onClick={() => setHwImmersive(v => !v)}
-              className={`fixed ${!hwImmersive && effectiveMode !== 'choose' && !isLandscape ? 'bottom-[88px]' : 'bottom-5'} right-4 z-[9999] w-12 h-12 rounded-full shadow-xl flex items-center justify-center text-white text-xl transition-all overflow-hidden border-2 ${hwImmersive ? 'bg-indigo-600 border-indigo-400' : 'bg-[rgba(15,23,42,0.88)] border-white/40'}`}
+              className={`fixed ${!hwImmersive && effectiveMode !== 'choose' ? 'bottom-[88px]' : 'bottom-5'} right-4 z-[9999] w-12 h-12 rounded-full shadow-xl flex items-center justify-center text-white text-xl transition-all overflow-hidden border-2 ${hwImmersive ? 'bg-indigo-600 border-indigo-400' : 'bg-[rgba(15,23,42,0.88)] border-white/40'}`}
               style={{ backdropFilter: 'blur(10px)' }}
               title={hwImmersive ? 'Exit Focus Mode' : 'Focus Mode'}
             >
@@ -6767,10 +6758,10 @@ export const StudentDashboard: React.FC<Props> = ({
                   {(settings?.appShortName || settings?.appName || 'A').charAt(0)}
                 </span>
               )}
-            </button>}
+            </button>
 
-            {/* Fixed bottom nav — always at screen bottom, hidden only in immersive/chooser/landscape */}
-            {effectiveMode !== 'choose' && !hwImmersive && !isLandscape && (
+            {/* Fixed bottom nav — always at screen bottom, hidden only in immersive/chooser */}
+            {effectiveMode !== 'choose' && !hwImmersive && (
             <div className="fixed bottom-0 left-0 right-0 z-[160] border-t border-slate-100 bg-white px-4 py-3 flex items-center gap-3">
               <button
                 disabled={!prevHw}
@@ -7615,7 +7606,7 @@ export const StudentDashboard: React.FC<Props> = ({
                     </div>
                     <div className="min-w-0">
                       <p className="text-[9px] font-black uppercase tracking-[0.15em]" style={{ color: tierTheme.primary }}>Continue Reading</p>
-                      <p className="text-[8.5px] font-normal leading-none mt-0.5 truncate opacity-40" style={{ color: tierTheme.primary }}>Where you left off · swipe or × to remove</p>
+                      <p className="text-[8.5px] font-normal leading-none mt-0.5 truncate opacity-40" style={{ color: tierTheme.primary }}>Where you left off · ← swipe to remove</p>
                     </div>
                   </div>
                   <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm" style={{ color: tierTheme.primary, background: `${tierTheme.primary}12`, border: `1px solid ${tierTheme.primary}30` }}>
@@ -7670,34 +7661,26 @@ export const StudentDashboard: React.FC<Props> = ({
                           className="rounded-xl overflow-hidden"
                           style={{ background: tierTheme.cardBg || '#ffffff', border: `1px solid ${tierTheme.cardBorder || tierTheme.primary + '18'}`, boxShadow: `0 2px 8px ${tierTheme.primary}0e` }}
                         >
-                          <div className="flex items-center">
-                            <button onClick={() => openRecentChapter(entry)} className="flex-1 text-left px-3 py-1.5 flex items-center gap-2 min-w-0">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[8px] font-black uppercase tracking-widest truncate leading-none" style={{ color: tierTheme.primary }}>
-                                  Class {entry.classLevel} · {entry.subject?.name || 'Subject'}
-                                </p>
-                                <p className="text-[12px] font-black leading-snug line-clamp-1 mt-0.5" style={{ color: tierTheme.textColor || '#0f172a' }}>
-                                  {entry.chapter?.title || 'Chapter'}
-                                </p>
-                                <div className="flex items-center gap-1.5 mt-1.5">
-                                  <div className="flex-1 h-px bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full" style={{ width: `${Math.max(2, entry.scrollPct)}%`, background: `linear-gradient(to right,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }} />
-                                  </div>
-                                  <p className="text-[8px] text-slate-400 font-semibold shrink-0 leading-none">{entry.scrollPct}%</p>
+                          <button onClick={() => openRecentChapter(entry)} className="w-full text-left px-3 py-1.5 flex items-center gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[8px] font-black uppercase tracking-widest truncate leading-none" style={{ color: tierTheme.primary }}>
+                                Class {entry.classLevel} · {entry.subject?.name || 'Subject'}
+                              </p>
+                              <p className="text-[12px] font-black leading-snug line-clamp-1 mt-0.5" style={{ color: tierTheme.textColor || '#0f172a' }}>
+                                {entry.chapter?.title || 'Chapter'}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <div className="flex-1 h-px bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${Math.max(2, entry.scrollPct)}%`, background: `linear-gradient(to right,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }} />
                                 </div>
+                                <p className="text-[8px] text-slate-400 font-semibold shrink-0 leading-none">{entry.scrollPct}%</p>
                               </div>
-                              <span className="shrink-0 text-[9px] font-black text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm"
-                                style={{ background: `linear-gradient(135deg,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }}>
-                                Resume <ChevronRight size={8} />
-                              </span>
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); dismissRecentChapter(entry.id); }}
-                              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full mr-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 active:scale-90 transition-all"
-                            >
-                              <X size={13} />
-                            </button>
-                          </div>
+                            </div>
+                            <span className="shrink-0 text-[9px] font-black text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm"
+                              style={{ background: `linear-gradient(135deg,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }}>
+                              Resume <ChevronRight size={8} />
+                            </span>
+                          </button>
                         </SwipeToDismiss>
                       );
                     }
@@ -7711,35 +7694,27 @@ export const StudentDashboard: React.FC<Props> = ({
                           className="rounded-xl overflow-hidden"
                           style={{ background: tierTheme.cardBg || '#ffffff', border: `1px solid ${tierTheme.cardBorder || tierTheme.primary + '18'}`, boxShadow: `0 2px 8px ${tierTheme.primary}0e` }}
                         >
-                          <div className="flex items-center">
-                            <button onClick={() => openRecentLucent(entry)} className="flex-1 text-left px-3 py-1.5 flex items-center gap-2 min-w-0">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1 leading-none">
-                                  <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-teal-100 text-teal-700">📗 Lucent</span>
-                                  {entry.pageNo && (
-                                    <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-slate-800 text-white">P.{entry.pageNo}</span>
-                                  )}
-                                </div>
-                                <p className="text-[12px] font-black leading-snug line-clamp-1 mt-0.5" style={{ color: tierTheme.textColor || '#0f172a' }}>{entry.lessonTitle}</p>
-                                <div className="flex items-center gap-1.5 mt-1.5">
-                                  <div className="flex-1 h-px bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full" style={{ width: `${Math.max(2, entry.scrollPct)}%`, background: `linear-gradient(to right,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }} />
-                                  </div>
-                                  <p className="text-[8px] text-slate-400 font-semibold shrink-0 leading-none">{entry.scrollPct}%</p>
-                                </div>
+                          <button onClick={() => openRecentLucent(entry)} className="w-full text-left px-3 py-1.5 flex items-center gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1 leading-none">
+                                <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-teal-100 text-teal-700">📗 Lucent</span>
+                                {entry.pageNo && (
+                                  <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-slate-800 text-white">P.{entry.pageNo}</span>
+                                )}
                               </div>
-                              <span className="shrink-0 text-[9px] font-black text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm"
-                                style={{ background: `linear-gradient(135deg,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }}>
-                                Resume <ChevronRight size={8} />
-                              </span>
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); removeRecentLucent(entry.id); setRecentLucent(getRecentLucent()); }}
-                              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full mr-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 active:scale-90 transition-all"
-                            >
-                              <X size={13} />
-                            </button>
-                          </div>
+                              <p className="text-[12px] font-black leading-snug line-clamp-1 mt-0.5" style={{ color: tierTheme.textColor || '#0f172a' }}>{entry.lessonTitle}</p>
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <div className="flex-1 h-px bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${Math.max(2, entry.scrollPct)}%`, background: `linear-gradient(to right,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }} />
+                                </div>
+                                <p className="text-[8px] text-slate-400 font-semibold shrink-0 leading-none">{entry.scrollPct}%</p>
+                              </div>
+                            </div>
+                            <span className="shrink-0 text-[9px] font-black text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm"
+                              style={{ background: `linear-gradient(135deg,${tierTheme.btnStart || tierTheme.primary},${tierTheme.btnEnd || tierTheme.primary})` }}>
+                              Resume <ChevronRight size={8} />
+                            </span>
+                          </button>
                         </SwipeToDismiss>
                       );
                     }
@@ -7753,34 +7728,26 @@ export const StudentDashboard: React.FC<Props> = ({
                         className="rounded-xl overflow-hidden"
                         style={{ background: tierTheme.cardBg || '#ffffff', border: `1px solid ${tierTheme.cardBorder || tierTheme.primary + '18'}`, boxShadow: `0 2px 8px ${tierTheme.primary}0e` }}
                       >
-                        <div className="flex items-center">
-                          <button onClick={() => openRecentHw(entry)} className="flex-1 text-left px-3 py-1.5 flex items-center gap-2 min-w-0">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1 leading-none">
-                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest ${meta.chipBg} ${meta.chipText}`}>{meta.label}</span>
-                                {entry.hw?.pageNo && (
-                                  <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-slate-800 text-white">P.{entry.hw.pageNo}</span>
-                                )}
-                              </div>
-                              <p className="text-[12px] font-black leading-snug line-clamp-1 mt-0.5" style={{ color: tierTheme.textColor || '#0f172a' }}>{entry.title}</p>
-                              <div className="flex items-center gap-1.5 mt-1.5">
-                                <div className="flex-1 h-px bg-slate-100 rounded-full overflow-hidden">
-                                  <div className={`h-full rounded-full bg-gradient-to-r ${meta.barFrom} ${meta.barTo}`} style={{ width: `${Math.max(2, entry.scrollPct)}%` }} />
-                                </div>
-                                <p className="text-[8px] text-slate-400 font-semibold shrink-0 leading-none">{entry.scrollPct}%</p>
-                              </div>
+                        <button onClick={() => openRecentHw(entry)} className="w-full text-left px-3 py-1.5 flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 leading-none">
+                              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest ${meta.chipBg} ${meta.chipText}`}>{meta.label}</span>
+                              {entry.hw?.pageNo && (
+                                <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-slate-800 text-white">P.{entry.hw.pageNo}</span>
+                              )}
                             </div>
-                            <span className={`shrink-0 text-[9px] font-black text-white ${meta.btnBg} px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm`}>
-                              Resume <ChevronRight size={8} />
-                            </span>
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); dismissRecentHw(entry.id); }}
-                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full mr-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 active:scale-90 transition-all"
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
+                            <p className="text-[12px] font-black leading-snug line-clamp-1 mt-0.5" style={{ color: tierTheme.textColor || '#0f172a' }}>{entry.title}</p>
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <div className="flex-1 h-px bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full bg-gradient-to-r ${meta.barFrom} ${meta.barTo}`} style={{ width: `${Math.max(2, entry.scrollPct)}%` }} />
+                              </div>
+                              <p className="text-[8px] text-slate-400 font-semibold shrink-0 leading-none">{entry.scrollPct}%</p>
+                            </div>
+                          </div>
+                          <span className={`shrink-0 text-[9px] font-black text-white ${meta.btnBg} px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm`}>
+                            Resume <ChevronRight size={8} />
+                          </span>
+                        </button>
                       </SwipeToDismiss>
                     );
                   })}
@@ -8705,148 +8672,6 @@ export const StudentDashboard: React.FC<Props> = ({
                   const _rC = _sz / 2 + 19;  // third ring / orbit
                   const _rD = _sz / 2 + 26;  // outermost ring
                   const _orbitDur = _lvl >= 13 ? '4s' : _lvl >= 10 ? '5.5s' : '7s';
-
-                  /* ── L15 PREMIUM COIN ── */
-                  if (_lvl >= 15) {
-                    const coinSz = 196;
-                    const ccx = coinSz / 2;
-                    const ccy = coinSz / 2;
-                    const outerR = 95;
-                    const rimR   = 85;
-                    const faceR  = 72;
-                    const textR  = 79;
-                    return (
-                      <div className="relative flex items-center justify-center" style={{ width: coinSz, height: coinSz + 26 }}>
-                        <svg width={coinSz} height={coinSz} viewBox={`0 0 ${coinSz} ${coinSz}`} xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible', display: 'block' }}>
-                          <defs>
-                            <radialGradient id="l15rim" cx="42%" cy="32%" r="68%">
-                              <stop offset="0%" stopColor="#3c3c48"/>
-                              <stop offset="45%" stopColor="#22222c"/>
-                              <stop offset="100%" stopColor="#13131a"/>
-                            </radialGradient>
-                            <radialGradient id="l15face" cx="45%" cy="35%" r="65%">
-                              <stop offset="0%" stopColor="#242432"/>
-                              <stop offset="65%" stopColor="#14141e"/>
-                              <stop offset="100%" stopColor="#0c0c14"/>
-                            </radialGradient>
-                            <linearGradient id="l15gold" x1="0%" y1="0%" x2="100%" y2="100%">
-                              <stop offset="0%" stopColor="#f7e07a"/>
-                              <stop offset="28%" stopColor="#c9a227"/>
-                              <stop offset="55%" stopColor="#edc84a"/>
-                              <stop offset="78%" stopColor="#9e7618"/>
-                              <stop offset="100%" stopColor="#f7e07a"/>
-                            </linearGradient>
-                            <filter id="l15glow" x="-25%" y="-25%" width="150%" height="150%">
-                              <feGaussianBlur stdDeviation="3" result="b"/>
-                              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-                            </filter>
-                            <filter id="l15textglow" x="-10%" y="-10%" width="120%" height="120%">
-                              <feGaussianBlur stdDeviation="1.5" result="b"/>
-                              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-                            </filter>
-                            <clipPath id="l15logoClip">
-                              <circle cx={ccx} cy={ccy} r={faceR - 1}/>
-                            </clipPath>
-                          </defs>
-
-                          {/* Outer atmosphere rings */}
-                          <circle cx={ccx} cy={ccy} r={outerR + 8}  fill="none" stroke="#c9a227" strokeWidth="0.4" opacity="0.2"/>
-                          <circle cx={ccx} cy={ccy} r={outerR + 4}  fill="none" stroke="#c9a227" strokeWidth="0.6" opacity="0.3"/>
-
-                          {/* Main coin rim */}
-                          <circle cx={ccx} cy={ccy} r={outerR} fill="url(#l15rim)" stroke="url(#l15gold)" strokeWidth="2.8" filter="url(#l15glow)"/>
-
-                          {/* Inner rim ring */}
-                          <circle cx={ccx} cy={ccy} r={rimR} fill="none" stroke="#c9a227" strokeWidth="0.9" opacity="0.55"/>
-
-                          {/* Gold bar ornaments at 4 diagonal positions */}
-                          {[45, 135, 225, 315].map((deg, i) => {
-                            const rad = (deg * Math.PI) / 180;
-                            const x1 = ccx + Math.cos(rad) * (rimR + 3);
-                            const y1 = ccy + Math.sin(rad) * (rimR + 3);
-                            const x2 = ccx + Math.cos(rad) * (outerR - 3);
-                            const y2 = ccy + Math.sin(rad) * (outerR - 3);
-                            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="url(#l15gold)" strokeWidth="4" strokeLinecap="round" opacity="0.9"/>;
-                          })}
-
-                          {/* Small gold dots at cardinal positions on rim */}
-                          {[0, 90, 180, 270].map((deg, i) => {
-                            const rad = (deg * Math.PI) / 180;
-                            return <circle key={i} cx={ccx + Math.cos(rad) * (rimR + 4)} cy={ccy + Math.sin(rad) * (rimR + 4)} r="2.2" fill="#c9a227" opacity="0.75"/>;
-                          })}
-
-                          {/* Medal face */}
-                          <circle cx={ccx} cy={ccy} r={faceR} fill="url(#l15face)" stroke="url(#l15gold)" strokeWidth="1.8"/>
-
-                          {/* Curved text TOP: "THE PINNACLE OF RECOGNITION" */}
-                          <path id="l15top" d={`M ${ccx - textR} ${ccy} A ${textR} ${textR} 0 0 0 ${ccx + textR} ${ccy}`} fill="none"/>
-                          <text fontSize="7" fill="#c9a227" fontFamily="Arial,sans-serif" fontWeight="800" letterSpacing="1.4" filter="url(#l15textglow)">
-                            <textPath href="#l15top" startOffset="50%" textAnchor="middle">THE PINNACLE OF RECOGNITION</textPath>
-                          </text>
-
-                          {/* Curved text BOTTOM: "MAXIMUM ACHIEVED" */}
-                          <path id="l15bot" d={`M ${ccx + textR} ${ccy} A ${textR} ${textR} 0 0 0 ${ccx - textR} ${ccy}`} fill="none"/>
-                          <text fontSize="7" fill="#c9a227" fontFamily="Arial,sans-serif" fontWeight="800" letterSpacing="2.2" filter="url(#l15textglow)">
-                            <textPath href="#l15bot" startOffset="50%" textAnchor="middle">MAXIMUM ACHIEVED</textPath>
-                          </text>
-
-                          {/* Top & bottom text dots */}
-                          <circle cx={ccx} cy={ccy - textR + 1} r="1.8" fill="#c9a227" opacity="0.85"/>
-                          <circle cx={ccx} cy={ccy + textR - 1} r="1.8" fill="#c9a227" opacity="0.85"/>
-
-                          {/* Center content — Gmail photo > app logo > emoji fallback */}
-                          {user.photoURL && user.avatarChoice === 'gmail'
-                            ? <image href={user.photoURL}
-                                x={ccx - (faceR - 1)} y={ccy - (faceR - 1)}
-                                width={(faceR - 1) * 2} height={(faceR - 1) * 2}
-                                preserveAspectRatio="xMidYMid slice"
-                                clipPath="url(#l15logoClip)"/>
-                            : settings?.appLogo
-                              ? <image href={settings.appLogo}
-                                  x={ccx - (faceR - 1)} y={ccy - (faceR - 1)}
-                                  width={(faceR - 1) * 2} height={(faceR - 1) * 2}
-                                  preserveAspectRatio="xMidYMid meet"
-                                  clipPath="url(#l15logoClip)"/>
-                              : <>
-                                  <text x={ccx} y={ccy - 12} textAnchor="middle" fontSize="28" style={{ userSelect: 'none' }}>🎓</text>
-                                  <text x={ccx} y={ccy + 14} textAnchor="middle" fontSize="20" style={{ userSelect: 'none' }}>📖</text>
-                                  <text x={ccx} y={ccy + 38} textAnchor="middle" fontSize="17" fontWeight="900"
-                                    fill="url(#l15gold)" letterSpacing="5" fontFamily="'Arial Black',Arial,sans-serif"
-                                    filter="url(#l15glow)">IIC</text>
-                                </>
-                          }
-
-                          {/* Coin edge notch marks */}
-                          {Array.from({ length: 36 }, (_, i) => {
-                            const deg = i * 10;
-                            const rad = (deg * Math.PI) / 180;
-                            const skip = [45,135,225,315].some(d => Math.abs(deg-d) < 15);
-                            if (skip) return null;
-                            const r1 = outerR - 0.5;
-                            const r2 = outerR + 1.5;
-                            return <line key={i}
-                              x1={ccx + Math.cos(rad) * r1} y1={ccy + Math.sin(rad) * r1}
-                              x2={ccx + Math.cos(rad) * r2} y2={ccy + Math.sin(rad) * r2}
-                              stroke="#c9a227" strokeWidth="0.8" opacity="0.35"/>;
-                          })}
-                        </svg>
-
-                        {/* L15 badge floating at bottom */}
-                        <div className="absolute flex items-center gap-1.5 px-3 py-1 rounded-full z-10" style={{
-                          bottom: 0,
-                          left: '50%',
-                          transform: 'translateX(-50%)',
-                          background: 'linear-gradient(135deg, #22222c, #14141e)',
-                          border: '1.5px solid #c9a22780',
-                          boxShadow: '0 2px 16px rgba(201,162,39,0.45)',
-                        }}>
-                          <span style={{ fontSize: 11 }}>💠</span>
-                          <span className="font-black" style={{ fontSize: 10, color: '#d4a429', letterSpacing: '0.06em' }}>L15</span>
-                        </div>
-                      </div>
-                    );
-                  }
-
                   return (
                     <div className="relative flex items-center justify-center" style={{ width: _total, height: _total }}>
 
@@ -8984,11 +8809,8 @@ export const StudentDashboard: React.FC<Props> = ({
 
               {/* ─── Name row ─── */}
               <div className="flex items-center justify-center gap-2.5 px-8 mb-1.5">
-                <h2 className="font-black leading-none tracking-tight truncate" style={{ ...(_nameStyle as object), fontSize: _pLvl.level >= 15 ? 24 : 26 }}>
-                  {_pLvl.level >= 15
-                    ? `(${(user.name || 'Student').replace(/^\(+|\)+$/g, '').toUpperCase()})`
-                    : (user.name || 'Student').toUpperCase()
-                  }
+                <h2 className="font-black text-[26px] leading-none tracking-tight truncate" style={_nameStyle}>
+                  {(user.name || 'Student').toUpperCase()}
                 </h2>
                 <button
                   onClick={() => { setNewNameInput(user.name); setShowNameChangeModal(true); }}
@@ -9003,25 +8825,14 @@ export const StudentDashboard: React.FC<Props> = ({
 
               {/* ─── Tier badge ─── */}
               <div className="flex justify-center mb-2">
-                {_pLvl.level >= 15 ? (
-                  <span className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full text-[11px] font-black tracking-[0.16em] uppercase" style={{
-                    background: 'linear-gradient(135deg, #28282f, #18181f)',
-                    color: '#c9a227',
-                    border: '1px solid #c9a22755',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(201,162,39,0.15)',
-                  }}>
-                    ▪ {_pTierLabel}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full text-[11px] font-black tracking-[0.16em] uppercase" style={{
-                    background: _light ? `${tierTheme.primary}18` : tierTheme.pillGrad,
-                    color: _light ? tierTheme.primary : '#ffffff',
-                    border: `1px solid ${tierTheme.primary}50`,
-                    boxShadow: `0 6px 22px ${tierTheme.primary}3a`,
-                  }}>
-                    {tierTheme.emoji} {_pTierLabel}
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full text-[11px] font-black tracking-[0.16em] uppercase" style={{
+                  background: _light ? `${tierTheme.primary}18` : tierTheme.pillGrad,
+                  color: _light ? tierTheme.primary : '#ffffff',
+                  border: `1px solid ${tierTheme.primary}50`,
+                  boxShadow: `0 6px 22px ${tierTheme.primary}3a`,
+                }}>
+                  {tierTheme.emoji} {_pTierLabel}
+                </span>
               </div>
 
               {/* ─── Single row: join date · days · avatar switcher ─── */}
@@ -9046,7 +8857,6 @@ export const StudentDashboard: React.FC<Props> = ({
                       if (!user.photoURL) return;
                       const updated = { ...user, avatarChoice: 'gmail' as const };
                       handleUserUpdate(updated);
-                      await saveUserToLive(updated);
                     }}
                     disabled={!user.photoURL}
                     className="px-3 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
@@ -9089,234 +8899,146 @@ export const StudentDashboard: React.FC<Props> = ({
               }} />
             </div>
 
-            {/* ── LEVEL HERO CARD ── */}
+            {/* ── LEVEL HERO CARD (inline, click → score panel) ── */}
             {(() => {
-              const _lvlNum   = _pLvl.level;
-              const _lvlCol   = _pLvl.color;
-              const _isMaxLvl = _lvlNum >= 15;
+              const _lvlNum  = _pLvl.level;
+              const _lvlCol  = _pLvl.color;
+              const _subKey  = (user.subscriptionLevel || 'FREE') as string;
+              const _subMultiMap: Record<string, string> = { FREE: '1×', BASIC: '1.2×', ULTRA: '1.5×' };
+              const _subMulti = _subMultiMap[_subKey] ?? '1×';
               const _lvlDesc  = _lvlNum >= 15 ? 'Maximum Level Achieved — The Pinnacle of Learning'
                 : _lvlNum >= 13 ? 'Near Maximum Rank — Absolute Elite'
                 : _lvlNum >= 10 ? 'Champion Level — Elite Learning Achieved'
                 : _lvlNum >= 7  ? 'Expert Status — Making Great Progress'
                 : _lvlNum >= 4  ? 'Consistent Learner — Growing Fast!'
                 : 'Keep Learning — Reach New Heights!';
+              const _isMaxLvl = _lvlNum >= 15;
+              const _lvlDisp  = _isMaxLvl ? '15 MAX' : `${_lvlNum} / 15`;
               return (
-                <button
-                  onClick={() => setShowScorePanel(true)}
-                  className="w-full text-left active:scale-[0.988] transition-all duration-150"
+                <button onClick={() => setShowScorePanel(true)}
+                  className="w-full text-left active:scale-[0.98] transition-transform"
+                  style={{ borderTop: `1px solid ${_lvlCol}28` }}
                 >
-                  {/* Top accent line */}
-                  <div style={{ height: 2, background: `linear-gradient(90deg, ${_lvlCol}00 0%, ${_lvlCol} 40%, ${_lvlCol}00 100%)` }} />
-
-                  <div className="px-5 pt-5 pb-5">
-                    {/* Row 1: avatar + title + chevron */}
-                    <div className="flex items-center gap-4 mb-5">
-                      <div className="shrink-0 flex items-center justify-center rounded-2xl" style={{
-                        width: 56, height: 56,
-                        background: `linear-gradient(145deg, ${_lvlCol}22, ${_lvlCol}08)`,
-                        border: `1.5px solid ${_lvlCol}38`,
-                        boxShadow: `0 0 20px ${_lvlCol}20`,
-                      }}>
-                        <span style={{ fontSize: 28, lineHeight: 1 }}>{_pLvl.emoji}</span>
-                      </div>
-
+                  <div className="mx-0 px-4 py-3" style={{
+                    background: _light
+                      ? `linear-gradient(135deg, ${_lvlCol}10 0%, ${_lvlCol}06 100%)`
+                      : `linear-gradient(135deg, ${_lvlCol}18 0%, ${_lvlCol}08 100%)`,
+                  }}>
+                    {/* Top row: emoji + level name + stats inline */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg leading-none shrink-0">{_pLvl.emoji}</span>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="font-bold leading-none truncate" style={{
-                            fontSize: 17,
-                            color: _light ? '#0f172a' : '#f1f5f9',
-                          }}>
-                            {_pLvl.label}
-                          </span>
-                          <span className="shrink-0 font-black leading-none px-2 py-0.5 rounded-lg" style={{
-                            fontSize: 9,
-                            color: _lvlCol,
-                            background: `${_lvlCol}18`,
-                            border: `1px solid ${_lvlCol}30`,
-                            letterSpacing: '0.04em',
-                          }}>
-                            L{_lvlNum}
-                          </span>
-                        </div>
-                        <p className="leading-relaxed" style={{
-                          fontSize: 10.5,
-                          fontWeight: 500,
-                          color: _light ? '#64748b' : 'rgba(255,255,255,0.4)',
+                        <p className="font-black uppercase truncate" style={{
+                          fontSize: 13,
+                          color: _lvlCol,
+                          textShadow: `0 0 14px ${_lvlCol}60`,
+                          letterSpacing: '0.14em',
                         }}>
+                          ✦ {_pLvl.label.toUpperCase()} ✦
+                        </p>
+                        <p className="text-[9px] font-semibold truncate" style={{ color: _light ? '#64748b' : 'rgba(255,255,255,0.4)' }}>
                           {_lvlDesc}
                         </p>
                       </div>
-
-                      <ChevronRight size={15} style={{ color: _light ? '#cbd5e1' : 'rgba(255,255,255,0.2)' }} className="shrink-0" />
-                    </div>
-
-                    {/* Row 2: XP + progress bar */}
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold tabular-nums" style={{
-                          fontSize: 12,
-                          color: _light ? '#475569' : 'rgba(255,255,255,0.52)',
-                        }}>
-                          {_pRawScore.toLocaleString('en-IN')} XP
-                        </span>
-                        <span className="font-semibold" style={{ fontSize: 11, color: _lvlCol }}>
-                          {_isMaxLvl ? 'Max Level ✓' : `${_pProgress}%`}
+                      {/* Compact stats pills */}
+                      <div className="flex gap-1 shrink-0">
+                        {_pLvl.discount > 0 && (
+                          <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{ background: `${_lvlCol}20`, color: _lvlCol, border: `1px solid ${_lvlCol}35` }}>
+                            {_pLvl.discount}% OFF
+                          </span>
+                        )}
+                        <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{ background: `${_lvlCol}20`, color: _lvlCol, border: `1px solid ${_lvlCol}35` }}>
+                          L{_lvlNum}{_isMaxLvl ? ' MAX' : '/15'}
                         </span>
                       </div>
-                      <div className="h-[5px] rounded-full overflow-hidden" style={{
-                        background: _light ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.07)',
-                      }}>
-                        <div className="h-full rounded-full transition-all duration-700" style={{
-                          width: `${_isMaxLvl ? 100 : _pProgress}%`,
-                          background: `linear-gradient(90deg, ${_lvlCol}aa, ${_lvlCol})`,
-                        }} />
+                      <ChevronRight size={12} style={{ color: _lvlCol, opacity: 0.6, flexShrink: 0 }} />
+                    </div>
+                    {/* XP progress bar */}
+                    <div>
+                      <div className="flex justify-between text-[8px] font-bold mb-0.5" style={{ color: _light ? '#94a3b8' : 'rgba(255,255,255,0.35)' }}>
+                        <span>{_pRawScore.toLocaleString('en-IN')} XP</span>
+                        {!_isMaxLvl && <span>{_pProgress}%</span>}
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: _light ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)' }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${_pProgress}%`, background: tierTheme.pillGrad, boxShadow: `0 0 6px ${_lvlCol}60` }} />
                       </div>
                     </div>
-
-                    {/* Row 3: Badges */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {_pLvl.discount > 0 && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-semibold" style={{
-                          fontSize: 10.5,
-                          color: _lvlCol,
-                          background: `${_lvlCol}12`,
-                          border: `1px solid ${_lvlCol}28`,
-                        }}>
-                          🏷️ {_pLvl.discount}% Discount
-                        </span>
-                      )}
-                      {(user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-semibold" style={{
-                          fontSize: 10.5,
-                          color: _light ? '#6d28d9' : '#c4b5fd',
-                          background: _light ? 'rgba(109,40,217,0.08)' : 'rgba(196,181,253,0.1)',
-                          border: `1px solid ${_light ? 'rgba(109,40,217,0.2)' : 'rgba(196,181,253,0.2)'}`,
-                        }}>
-                          ⭐ {user.role === 'SUB_ADMIN' ? 'Sub Admin' : 'Admin'}
-                        </span>
-                      )}
-                    </div>
+                    {/* Admin badge */}
+                    {(user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
+                      <div className="flex mt-1.5">
+                        <span className="text-[8px] font-bold text-slate-400 bg-slate-200/20 px-2 py-0.5 rounded-full">Admin</span>
+                      </div>
+                    )}
                   </div>
                 </button>
               );
             })()}
 
             {/* ── USER ID + EMAIL ROW ── */}
-            {(() => {
-              const _idCol = tierTheme.primary;
-              return (
-                <div style={{
-                  borderTop: `1px solid ${_idCol}18`,
-                  background: _light ? 'rgba(0,0,0,0.025)' : 'rgba(0,0,0,0.28)',
-                }}>
-                  <button
-                    onClick={() => { try { navigator.clipboard.writeText(user.id); showAlert('User ID copied!', 'SUCCESS'); } catch {} }}
-                    className="w-full flex items-center gap-3 px-5 py-3 active:opacity-60 transition-opacity"
-                    style={{ borderBottom: `1px solid ${_idCol}12` }}
-                  >
-                    <div className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${_idCol}14` }}>
-                      <UserIcon size={11} style={{ color: _idCol }} />
-                    </div>
-                    <span className="font-mono text-[10px] font-medium truncate flex-1 tracking-wide" style={{
-                      color: _light ? '#475569' : 'rgba(255,255,255,0.48)',
-                    }}>{user.id || '—'}</span>
-                    <Copy size={10} style={{ color: _idCol, opacity: 0.45, flexShrink: 0 }} />
-                  </button>
-                  {user.email && (
-                    <button
-                      onClick={() => { try { navigator.clipboard.writeText(user.email!); showAlert('Email copied!', 'SUCCESS'); } catch {} }}
-                      className="w-full flex items-center gap-3 px-5 py-3 active:opacity-60 transition-opacity"
-                    >
-                      <div className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${_idCol}14` }}>
-                        <span className="font-black" style={{ fontSize: 11, color: _idCol, lineHeight: 1 }}>@</span>
-                      </div>
-                      <span className="text-[10px] font-medium truncate flex-1" style={{
-                        color: _light ? '#475569' : 'rgba(255,255,255,0.48)',
-                      }}>{user.email}</span>
-                      <Copy size={10} style={{ color: _idCol, opacity: 0.45, flexShrink: 0 }} />
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
+            <div className="flex gap-0 border-t" style={{ borderColor: `${tierTheme.primary}18` }}>
+              <button
+                onClick={() => { try { navigator.clipboard.writeText(user.id); showAlert('User ID copied!', 'SUCCESS'); } catch {} }}
+                className="flex-1 flex items-center gap-2 px-4 py-3 active:scale-95 transition-transform"
+                style={{ borderRight: `1px solid ${tierTheme.primary}15` }}
+              >
+                <span className={`text-[9px] font-black uppercase tracking-widest shrink-0 ${_pTxtMuted}`}>ID</span>
+                <span className={`text-[10px] font-bold truncate font-mono flex-1 ${_pTxt}`}>{user.id || '—'}</span>
+                <Copy size={10} style={{ color: _pTxtMutedColor }} className="shrink-0" />
+              </button>
+              {user.email && (
+                <button
+                  onClick={() => { try { navigator.clipboard.writeText(user.email!); showAlert('Email copied!', 'SUCCESS'); } catch {} }}
+                  className="flex-1 flex items-center gap-2 px-4 py-3 active:scale-95 transition-transform"
+                >
+                  <span className={`text-[9px] font-black uppercase tracking-widest shrink-0 ${_pTxtMuted}`}>@</span>
+                  <span className={`text-[10px] font-bold truncate flex-1 ${_pTxt}`}>{user.email}</span>
+                  <Copy size={10} style={{ color: _pTxtMutedColor }} className="shrink-0" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* ── STATS ROW ── */}
+          {/* ── STATS ROW (redesigned) ── */}
           <div className="px-3 mb-3">
-            <div className="rounded-2xl overflow-hidden" style={{
-              background: _pCard,
-              border: `1px solid ${tierTheme.primary}20`,
-              boxShadow: `0 2px 14px rgba(0,0,0,0.14)`,
-            }}>
-              <div className="grid grid-cols-3" style={{ gap: 0 }}>
+            <div className="rounded-2xl overflow-hidden" style={{ background: _pCard, border: `1px solid ${tierTheme.primary}28`, boxShadow: `0 2px 16px rgba(0,0,0,0.18)` }}>
+              {/* Top accent line */}
+              <div className="h-[2px]" style={{ background: `linear-gradient(90deg, transparent 0%, ${tierTheme.primary}90 50%, transparent 100%)` }} />
+              <div className="grid grid-cols-3">
                 {/* Credits */}
-                <div className="py-6 px-3 flex flex-col items-center" style={{
-                  borderRight: `1px solid ${tierTheme.primary}12`,
-                }}>
-                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3" style={{
-                    background: `${tierTheme.primary}14`,
-                  }}>
-                    <Coins size={17} style={{ color: tierTheme.primary }} />
+                <div className="py-4 px-2 flex flex-col items-center gap-1" style={{ borderRight: `1px solid ${tierTheme.primary}18` }}>
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-1" style={{ background: `${tierTheme.primary}18` }}>
+                    <Coins size={15} style={{ color: tierTheme.primary }} />
                   </div>
-                  <div className="font-black tabular-nums text-center leading-none mb-1.5" style={{
-                    color: _pTxtColor,
-                    fontSize: (user.credits ?? 0) > 99999 ? 13 : 20,
-                  }}>
+                  <div className="font-black tabular-nums text-center leading-none" style={{ color: _pTxtColor, fontSize: (user.credits ?? 0) > 99999 ? 13 : 17 }}>
                     {(user.credits ?? 0).toLocaleString('en-IN')}
                   </div>
                   {(user.bonusCredits ?? 0) > 0 && (
-                    <div className="text-[8px] font-semibold tabular-nums mb-1" style={{ color: `${tierTheme.primary}75` }}>
-                      +{(user.bonusCredits ?? 0).toLocaleString('en-IN')} perm
-                    </div>
+                    <div className="text-[8px] font-bold tabular-nums" style={{ color: `${tierTheme.primary}90` }}>+{(user.bonusCredits ?? 0).toLocaleString('en-IN')} perm</div>
                   )}
-                  <div className="text-[9px] font-bold uppercase tracking-[0.10em]" style={{ color: _pTxtSubColor }}>Credits</div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: _pTxtSubColor }}>Credits</div>
                 </div>
-
                 {/* Streak */}
-                <button
-                  onClick={() => setShowStreakPopup(true)}
-                  className="py-6 px-3 flex flex-col items-center active:scale-95 transition-transform"
-                  style={{ borderRight: `1px solid ${tierTheme.primary}12` }}
-                >
-                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3" style={{
-                    background: 'rgba(251,146,60,0.12)',
-                  }}>
-                    <Flame size={17} style={{ color: '#fb923c' }} />
+                <button onClick={() => setShowStreakPopup(true)} className="py-4 px-2 flex flex-col items-center gap-1 active:scale-95 transition-transform" style={{ borderRight: `1px solid ${tierTheme.primary}18` }}>
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-1" style={{ background: 'rgba(251,146,60,0.15)' }}>
+                    <Flame size={15} style={{ color: '#fb923c' }} />
                   </div>
-                  <div className="text-[20px] font-black tabular-nums leading-none mb-1.5" style={{ color: _pTxtColor }}>
-                    {user.streak > 0 ? user.streak : '0'}
-                  </div>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.10em]" style={{ color: _pTxtSubColor }}>Streak</div>
+                  <div className="text-[17px] font-black tabular-nums leading-none" style={{ color: _pTxtColor }}>{user.streak > 0 ? user.streak : '0'}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: _pTxtSubColor }}>Streak</div>
                 </button>
-
                 {/* XP Score */}
-                <div className="py-6 px-3 flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3" style={{
-                    background: 'rgba(234,179,8,0.12)',
-                  }}>
-                    <Star size={17} style={{ color: '#eab308' }} />
+                <div className="py-4 px-2 flex flex-col items-center gap-1">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-1" style={{ background: 'rgba(234,179,8,0.15)' }}>
+                    <Star size={15} style={{ color: '#eab308' }} />
                   </div>
                   {(() => {
-                    const _s = _pRawScore >= 1_000_000
-                      ? `${(_pRawScore / 1_000_000).toFixed(1)}M`
-                      : _pRawScore >= 100_000
-                      ? `${Math.round(_pRawScore / 1000)}k`
-                      : _pRawScore >= 1_000
-                      ? `${(_pRawScore / 1000).toFixed(1)}k`
-                      : String(_pRawScore);
-                    return (
-                      <div className="font-black tabular-nums text-center leading-none mb-1.5" style={{
-                        color: _pTxtColor,
-                        fontSize: _s.length <= 4 ? 20 : _s.length <= 6 ? 16 : 13,
-                      }}>{_s}</div>
-                    );
+                    const _s = _pRawScore >= 1000000 ? `${(_pRawScore/1000000).toFixed(1)}M` : _pRawScore >= 100000 ? `${Math.round(_pRawScore/1000)}k` : _pRawScore >= 1000 ? `${(_pRawScore/1000).toFixed(1)}k` : String(_pRawScore);
+                    return <div className="font-black tabular-nums leading-none text-center" style={{ color: _pTxtColor, fontSize: _s.length <= 4 ? 17 : _s.length <= 6 ? 14 : 12 }}>{_s}</div>;
                   })()}
-                  <div className="text-[9px] font-bold uppercase tracking-[0.10em]" style={{ color: _pTxtSubColor }}>XP Score</div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: _pTxtSubColor }}>XP Score</div>
                 </div>
               </div>
             </div>
           </div>
-
 
           {/* ── LEVEL ACHIEVEMENTS (redesigned) ── */}
           {(() => {
@@ -14391,7 +14113,7 @@ export const StudentDashboard: React.FC<Props> = ({
         return (
           <div className="fixed inset-0 z-[250] flex flex-col animate-in fade-in" style={{ background: tierTheme.profileBg }}>
             {/* Header */}
-            <div className={`text-white px-4 py-3 flex items-center gap-3 shrink-0${(isLandscapeUiHidden || isLandscape) ? ' hidden' : ''}`} style={{ background: tierTheme.topBarGrad }}>
+            <div className={`text-white px-4 py-3 flex items-center gap-3 shrink-0${isLandscapeUiHidden ? ' hidden' : ''}`} style={{ background: tierTheme.topBarGrad }}>
               <button
                 onClick={() => setLucentLessonCompare(null)}
                 className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors shrink-0"
@@ -16880,7 +16602,7 @@ export const StudentDashboard: React.FC<Props> = ({
               </button>
             )}
             {/* Header */}
-            <div className={`text-white px-4 py-3 flex items-center gap-2 shrink-0 ${(isLandscapeUiHidden || lucentImmersive || isLandscape || (lucentActiveTab === 'NOTES' && lucentNotesViewMode === 'chunk')) ? 'hidden' : ''}`} style={{ background: tierTheme.topBarGrad }}>
+            <div className={`text-white px-4 py-3 flex items-center gap-2 shrink-0 ${(isLandscapeUiHidden || lucentImmersive || (lucentActiveTab === 'NOTES' && lucentNotesViewMode === 'chunk')) ? 'hidden' : ''}`} style={{ background: tierTheme.topBarGrad }}>
               <button onClick={closeLucentViewer} className="bg-white/20 hover:bg-white/30 p-2 rounded-full shrink-0 transition-colors">
                 <ChevronRight size={18} className="rotate-180" />
               </button>
@@ -17015,16 +16737,6 @@ export const StudentDashboard: React.FC<Props> = ({
                       <LayoutGrid size={14} />
                     </button>
                   )}
-                  {/* Rotate — VIDEO tab only */}
-                  {lucentActiveTab === 'VIDEO' && (
-                    <button
-                      onClick={handleRotate}
-                      className={`w-8 h-8 flex items-center justify-center rounded-xl border transition-all active:scale-90 shrink-0 ${isLandscape ? 'bg-emerald-500/30 border-emerald-400/50 text-emerald-300' : 'bg-white/15 border-white/25 text-white'}`}
-                      title="Screen Rotate"
-                    >
-                      <RotateCcw size={14} />
-                    </button>
-                  )}
                   <span className="bg-white/20 px-2.5 py-1 rounded-full text-[11px] font-black whitespace-nowrap">
                     {safeIndex + 1}/{totalPages}
                   </span>
@@ -17043,7 +16755,7 @@ export const StudentDashboard: React.FC<Props> = ({
             {/* Notes scroll area */}
             <div
               ref={lucentScrollContainerRef}
-              className={`flex-1 overflow-y-auto ${lucentActiveTab === 'NOTES' ? '' : 'hidden'} ${!isLandscapeUiHidden && !lucentImmersive && !isLandscape ? 'pb-[72px]' : ''}`}
+              className={`flex-1 overflow-y-auto ${lucentActiveTab === 'NOTES' ? '' : 'hidden'} ${!isLandscapeUiHidden && !lucentImmersive ? 'pb-[72px]' : ''}`}
               onScroll={(e) => {
                 const t = e.currentTarget;
                 const max = t.scrollHeight - t.clientHeight;
@@ -17844,19 +17556,35 @@ RULES:
 
             {/* VIDEO TAB CONTENT */}
             {lucentActiveTab === 'VIDEO' && (currentPage as any)?.videoUrl && (
-              <div className="flex-1 relative bg-black overflow-hidden pb-[72px]">
-                <div style={{ position: 'absolute', inset: 0, bottom: 72 }}>
-                  <CustomPlayer
-                    videoUrl={(currentPage as any).videoUrl}
-                    onBack={closeLucentViewer}
-                    onBrandingClick={() => setLucentImmersive(v => !v)}
-                    badgePos={settings?.iicNstaBadgePos}
-                    isAdmin={_isAdminUser}
-                    onBadgePosChange={handleBadgePosChange}
-                    badgeLabel={settings?.playerBadgeLabel}
-                    fsButtonLabel={settings?.playerFsButtonLabel}
+              <div className="flex-1 overflow-y-auto pb-[72px] px-4 pt-4 flex flex-col gap-3">
+                <div
+                  className="rounded-2xl overflow-hidden bg-black shadow-xl border border-slate-200 relative"
+                  style={{ aspectRatio: '16/9', width: '100%' }}
+                >
+                  <iframe
+                    src={
+                      (currentPage as any).videoUrl?.includes('drive.google.com')
+                        ? formatDriveLink((currentPage as any).videoUrl)
+                        : formatVideoEmbed((currentPage as any).videoUrl)
+                    }
+                    className="w-full h-full border-none"
+                    allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+                    title="Lesson Video"
                   />
+                  {/* Drive blocker — covers the "Open in Drive" button top-right */}
+                  {(currentPage as any).videoUrl?.includes('drive.google.com') && (
+                    <div
+                      className="absolute top-0 right-0 bg-black/80 text-white text-[9px] font-bold px-2 py-1 rounded-bl-lg z-10 select-none"
+                      style={{ pointerEvents: 'all', cursor: 'default' }}
+                      title="Stay in the App"
+                    >🔒 App</div>
+                  )}
                 </div>
+                <p className="text-[11px] text-slate-400 text-center">
+                  📹 Video playing from Google Drive — no Gmail login required
+                </p>
               </div>
             )}
 
@@ -17912,7 +17640,7 @@ RULES:
 
             {/* PDF TAB CONTENT */}
             {lucentActiveTab === 'PDF' && (currentPage as any)?.pdfUrl && (
-              <div className={`flex-1 overflow-hidden flex flex-col ${(lucentImmersive || isLandscape) ? '' : 'pb-[72px] pt-2 px-3 gap-2'}`}>
+              <div className={`flex-1 overflow-hidden flex flex-col ${lucentImmersive ? '' : 'pb-[72px] pt-2 px-3 gap-2'}`}>
                 <div className={`flex-1 overflow-hidden bg-white relative ${lucentImmersive ? '' : 'rounded-2xl border border-blue-200 shadow-lg'}`}>
                   <div
                     style={{
@@ -17960,7 +17688,7 @@ RULES:
 
             {/* Fixed bottom nav — at first/last page, Prev/Next jump to
                 previous / next Lucent lesson automatically. */}
-            <div className={`fixed bottom-0 left-0 right-0 z-[210] pb-safe border-t border-slate-100 bg-white px-4 py-3 flex items-center gap-3 ${(isLandscapeUiHidden || lucentImmersive || isLandscape) ? 'hidden' : ''}`}>
+            <div className={`fixed bottom-0 left-0 right-0 z-[210] pb-safe border-t border-slate-100 bg-white px-4 py-3 flex items-center gap-3 ${(isLandscapeUiHidden || lucentImmersive) ? 'hidden' : ''}`}>
               <button onClick={() => { stopSpeech(); goPrev(); }} disabled={!canGoPrev}
                 title={safeIndex <= 0 && prevLesson ? `Previous lesson: ${prevLesson.lessonTitle}` : 'Previous page'}
                 className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl font-bold text-sm border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
@@ -17982,11 +17710,11 @@ RULES:
             </div>
 
           </div>
-          {/* Lucent FAB — hidden in video tab (IIC×NSTA button handles it there) */}
-          {lucentActiveTab !== 'VIDEO' && <button
+          {/* Lucent FAB — tap to directly toggle Focus Mode (no submenu) */}
+          <button
             onClick={() => { setLucentImmersive(v => !v); }}
             className={`fixed z-[9999] w-12 h-12 rounded-full shadow-xl flex flex-col items-center justify-center text-white transition-all overflow-hidden border-2 ${lucentImmersive ? 'bg-indigo-700 border-indigo-400' : 'bg-[rgba(15,23,42,0.88)] border-white/40'}`}
-            style={{ backdropFilter: 'blur(10px)', bottom: (lucentImmersive || isLandscape) ? '16px' : '72px', right: '16px' }}
+            style={{ backdropFilter: 'blur(10px)', bottom: lucentImmersive ? '16px' : '72px', right: '16px' }}
             title={lucentImmersive ? 'Exit Focus Mode' : 'Focus Mode'}
           >
             {lucentImmersive ? (
@@ -18000,7 +17728,7 @@ RULES:
                 <span style={{ fontSize: '7px', fontWeight: 900, letterSpacing: '0.02em', pointerEvents: 'none', lineHeight: 1, marginTop: '2px' }}>FOCUS</span>
               </>
             )}
-          </button>}
+          </button>
           </>
         );
       })()}

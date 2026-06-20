@@ -50,10 +50,8 @@ export const UniversalVideoView: React.FC<Props> = ({ user, onBack, settings }) 
                     <h3 className="text-white font-bold truncate px-4">{activeVideo.title}</h3>
                     <div className="w-10"></div>
                 </div>
-                <div className="flex-1 relative">
-                    <div style={{ position: 'absolute', inset: 0 }}>
-                        <CustomPlayer videoUrl={activeVideo.url} />
-                    </div>
+                <div className="flex-1 flex items-center justify-center">
+                    <CustomPlayer videoUrl={activeVideo.url} />
                 </div>
             </div>
         );

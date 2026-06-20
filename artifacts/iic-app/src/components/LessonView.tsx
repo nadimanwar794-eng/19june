@@ -11,7 +11,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { decodeHtml } from '../utils/htmlDecoder';
 import { storage } from '../utils/storage';
-import { getChapterData, saveUserHistory, saveTestResult, saveUserToLive, saveAdminMark2Topics, subscribeAdminMark2Topics } from '../firebase';
+import { getChapterData, saveUserHistory, saveTestResult, saveUserToLive } from '../firebase';
 import { SpeakButton } from './SpeakButton';
 import { McqSpeakButtons } from './McqSpeakButtons';
 import { ChunkedNotesReader } from './ChunkedNotesReader';
@@ -27,8 +27,6 @@ import { rotateScreen, isDesktopModeOn, setDesktopMode } from '../utils/displayP
 import { applyDeduction, getTotalCredits } from '../utils/creditSystem';
 import { getLevelFromScore } from '../utils/levelSystem';
 import { getActiveBoost } from '../utils/scoreSystem';
-import { ReadingScoreSession, ReadingScoreState } from '../utils/readingScoreEngine';
-import { ReadingScoreHUD } from './ReadingScoreHUD';
 import { PdfViewer } from './PdfViewer';
 
 
@@ -131,59 +129,6 @@ export const LessonView: React.FC<Props> = ({
     onScoreEarned: handleReadingScoreEarned,
   } : undefined;
 
-  // ── Media (Video / Audio) time-based score session ───────────────────────
-  const mediaScoreSessionRef = useRef<ReadingScoreSession | null>(null);
-  const [mediaScoreState, setMediaScoreState] = useState<ReadingScoreState | null>(null);
-
-  useEffect(() => {
-    // Detect if current content is video or audio
-    const isVideoContent = content?.type === 'VIDEO_LECTURE' || (
-      contentValue && (contentValue.startsWith('http://') || contentValue.startsWith('https://')) &&
-      !['PDF_FREE','PDF_PREMIUM','PDF_ULTRA','PDF_VIEWER'].includes(content?.type || '') &&
-      !content?.type?.includes('AUDIO') &&
-      (contentValue.includes('youtube') || contentValue.includes('youtu.be') ||
-       contentValue.includes('drive.google.com') || contentValue.includes('notebooklm.google.com'))
-    );
-    const isAudioContent = content?.type?.includes('AUDIO') || (
-      contentValue &&
-      (contentValue.includes('drive.google.com') || contentValue.includes('notebooklm.google.com')) &&
-      (content?.title?.toLowerCase().includes('audio') || content?.title?.toLowerCase().includes('podcast'))
-    );
-    const isMediaContent = isVideoContent || isAudioContent;
-
-    if (!isMediaContent || !user?.id) {
-      // Stop any running session
-      if (mediaScoreSessionRef.current) {
-        mediaScoreSessionRef.current.stop();
-        mediaScoreSessionRef.current = null;
-        setMediaScoreState(null);
-      }
-      return;
-    }
-
-    // Start a new session
-    const session = new ReadingScoreSession(
-      {
-        userId: user.id,
-        userLevel: getLevelFromScore(user.totalScore || 0),
-        subscriptionLevel: user.subscriptionTier || 'FREE',
-        isPremium: !!(user.isPremium || (user.subscriptionTier && user.subscriptionTier !== 'FREE')),
-        boostPercent: getActiveBoost(user as any),
-        mode: isAudioContent ? 'audio' : 'video',
-        onScoreEarned: handleReadingScoreEarned,
-      },
-      (state) => setMediaScoreState(state),
-    );
-    mediaScoreSessionRef.current = session;
-    session.start();
-
-    return () => {
-      session.stop();
-      mediaScoreSessionRef.current = null;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content?.id, content?.type, user?.id]);
-
   // On mount: always re-apply stored desktop mode preference to the viewport
   useEffect(() => {
     const current = isDesktopModeOn();
@@ -261,33 +206,7 @@ export const LessonView: React.FC<Props> = ({
       try { localStorage.setItem('nst_starred_notes_v1', JSON.stringify(updated)); } catch {}
       return updated;
     });
-    // Admin star in Class 6-12 → also save to Firebase Mark 2 so ALL users
-    // see the orange highlight in their own reader instantly.
-    if (isAdmin) {
-      const existsInMark2 = mark2Topics.includes(text);
-      const updatedMark2 = existsInMark2
-        ? mark2Topics.filter(t => t !== text)
-        : [...mark2Topics, text];
-      setMark2Topics(updatedMark2);
-      saveAdminMark2Topics(noteKey, updatedMark2);
-    }
   };
-
-  // Admin highlight system — admin stars a topic → RTDB → all users see orange highlight
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUB_ADMIN';
-
-  const [mark2Topics, setMark2Topics] = useState<string[]>([]);
-
-  // Real-time RTDB subscription — all users get live highlight updates
-  useEffect(() => {
-    if (!noteKey) return;
-    const unsub = subscribeAdminMark2Topics(noteKey, (topics) => {
-      setMark2Topics(topics);
-    });
-    return unsub;
-  }, [noteKey]);
-
-  const isTopicMark2 = (text: string) => mark2Topics.includes(text);
 
   const submitRef = useRef<() => void>();
 
@@ -706,15 +625,11 @@ export const LessonView: React.FC<Props> = ({
                           className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 mt-2"
                           noteKey={noteKey}
                           isStarred={isTopicStarred}
-                          onStarToggle={isAdmin ? toggleTopicStar : undefined}
+                          onStarToggle={toggleTopicStar}
                           preferChunkMode
                           hideTopBar={isImmersive}
                           onDesktopModeChange={setIsDesktopMode}
                           readingScoreConfig={readingScoreConfig}
-                          isAdmin={isAdmin}
-                          useImportantMark2={false}
-                          isMarked2={isTopicMark2}
-                          onMark2Toggle={undefined}
                       />
                   ) : (
                       <>
@@ -891,8 +806,8 @@ export const LessonView: React.FC<Props> = ({
       
       if (isImage) {
           return (
-              <div className="fixed inset-0 z-50 bg-[#111] flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
-                  <header className={`bg-black/90 backdrop-blur-md text-white p-4 absolute top-0 left-0 right-0 z-10 flex items-center justify-between border-b border-white/10${isImmersive ? ' hidden' : ''}`} style={{ top: 'env(safe-area-inset-top)' }}>
+              <div className="fixed inset-0 z-50 bg-[#111] flex flex-col">
+                  <header className={`bg-black/90 backdrop-blur-md text-white p-4 absolute top-0 left-0 right-0 z-10 flex items-center justify-between border-b border-white/10${isImmersive ? ' hidden' : ''}`}>
                       <div className="flex items-center gap-3"><button onClick={toggleFullScreen} className="p-2 bg-slate-100 rounded-full text-slate-600 hover:bg-slate-200" title="Toggle Fullscreen"><Maximize size={20} /></button>
                           <button onClick={onBack} className="p-2 bg-white/10 rounded-full"><ArrowLeft size={20} /></button>
                           <div>
@@ -902,14 +817,8 @@ export const LessonView: React.FC<Props> = ({
                       </div>
                       <button onClick={onBack} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors backdrop-blur-md"><X size={20} /></button>
                   </header>
-                  <div className="flex-1 min-h-0 overflow-auto pt-16 flex items-center justify-center" onContextMenu={preventMenu}>
-                      <img
-                          src={content.content}
-                          alt="Notes"
-                          className="max-w-full max-h-full object-contain"
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          draggable={false}
-                      />
+                  <div className="flex-1 overflow-y-auto pt-16 flex items-start justify-center" onContextMenu={preventMenu}>
+                      <img src={content.content} alt="Notes" className="w-full h-auto object-contain" draggable={false} />
                   </div>
               {floatingBtn}
               </div>
@@ -924,57 +833,27 @@ export const LessonView: React.FC<Props> = ({
 
       if (isGoogleDriveAudio) {
           return (
-              <div
-                className="fixed inset-0 z-50 bg-black flex flex-col"
-                onClick={() => setIsImmersive(v => !v)}
-              >
-                  {/* ── Floating gradient header (overlays video, no layout impact) ── */}
-                  <header
-                    className="absolute top-0 left-0 right-0 z-30 transition-all duration-300"
-                    style={{
-                      background: 'linear-gradient(to bottom, rgba(0,0,0,0.90) 0%, rgba(0,0,0,0.45) 65%, transparent 100%)',
-                      opacity: isImmersive ? 0 : 1,
-                      pointerEvents: isImmersive ? 'none' : 'auto',
-                      paddingBottom: 32,
-                    }}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div className="flex items-center gap-2 px-3 pt-3 pb-1">
-                      <button
-                        onClick={onBack}
-                        className="p-2 rounded-full active:scale-90 transition-transform"
-                        style={{ background: 'rgba(255,255,255,0.12)' }}
-                      >
-                        <ArrowLeft size={18} color="#fff" />
-                      </button>
-                      <div className="flex-1 min-w-0 mx-1">
-                        <h2 className="font-bold text-white text-[13px] leading-snug truncate">{content.title}</h2>
-                        <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.38)' }}>Tap screen to hide controls</p>
+              <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
+                  <header className={`bg-slate-900/90 backdrop-blur-md text-white p-4 flex items-center justify-between border-b border-white/10 z-20${isImmersive ? ' hidden' : ''}`}>
+                      <div className="flex items-center gap-3"><button onClick={toggleFullScreen} className="p-2 bg-slate-100 rounded-full text-slate-600 hover:bg-slate-200" title="Toggle Fullscreen"><Maximize size={20} /></button>
+                          <button onClick={onBack} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"><ArrowLeft size={20} /></button>
+                          <div>
+                            <h2 className="font-bold text-white leading-tight">{content.title}</h2>
+                            <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest">Premium Audio Experience</p>
+                          </div>
                       </div>
-                      <button
-                        onClick={onBack}
-                        className="p-2 rounded-full active:scale-90 transition-transform"
-                        style={{ background: 'rgba(255,255,255,0.12)' }}
-                      >
-                        <X size={18} color="#fff" />
-                      </button>
-                    </div>
+                      <button onClick={onBack} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"><X size={20} /></button>
                   </header>
-
-                  {/* ── Video fills FULL screen (no aspect-ratio, no padding) ── */}
-                  <div className="flex-1 relative" onClick={e => e.stopPropagation()}>
-                    <CustomPlayer videoUrl={contentValue} onNext={onNext} nextTitle={nextTitle} badgePos={settings?.iicNstaBadgePos} badgeLabel={settings?.playerBadgeLabel} fsButtonLabel={settings?.playerFsButtonLabel} />
+                  <div className="flex-1 flex items-center justify-center p-4 bg-slate-950 relative overflow-hidden">
+                      {/* Animated Background Gradients */}
+                      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-600/10 rounded-full blur-[100px] animate-pulse"></div>
+                      <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-600/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+                      
+                      <div className="w-full aspect-video relative z-10 rounded-2xl overflow-hidden shadow-2xl border border-white/5">
+                          <CustomPlayer videoUrl={contentValue} />
+                      </div>
                   </div>
-
-                  {/* ── Media score HUD ── */}
-                  {mediaScoreState && (
-                      <ReadingScoreHUD
-                          state={mediaScoreState}
-                          visible={true}
-                          levelColor="#818cf8"
-                      />
-                  )}
-                  {floatingBtn}
+              {floatingBtn}
               </div>
           );
       }
@@ -986,7 +865,6 @@ export const LessonView: React.FC<Props> = ({
               onBack={onBack}
               sessionKey={chapter?.id ? `chapter_${chapter.id}` : undefined}
               userId={user?.id}
-              userLevel={getLevelFromScore(user?.totalScore || 0)}
               subscriptionLevel={user?.subscriptionTier || 'FREE'}
               isPremium={!!(user?.isPremium || (user?.subscriptionTier && user.subscriptionTier !== 'FREE'))}
               boostPercent={getActiveBoost(user as any)}
@@ -1043,15 +921,11 @@ export const LessonView: React.FC<Props> = ({
                           topBarLabel={content.title}
                           noteKey={noteKey}
                           isStarred={isTopicStarred}
-                          onStarToggle={isAdmin ? toggleTopicStar : undefined}
+                          onStarToggle={toggleTopicStar}
                           preferChunkMode
                           hideTopBar={isImmersive}
                           onDesktopModeChange={setIsDesktopMode}
                           readingScoreConfig={readingScoreConfig}
-                          isAdmin={isAdmin}
-                          useImportantMark2={false}
-                          isMarked2={isTopicMark2}
-                          onMark2Toggle={undefined}
                       />
                       {isStreaming && (
                         <div className="flex items-center gap-2 text-slate-600 mt-4 animate-pulse">

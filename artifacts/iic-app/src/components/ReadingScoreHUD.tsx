@@ -83,12 +83,7 @@ export const ReadingScoreHUD: React.FC<Props> = ({
   if (!visible || state.isWindowClosed) return null;
 
   const isReading  = state.mode === 'reading';
-  const isVideo    = state.mode === 'video';
-  const isAudio    = state.mode === 'audio';
-  const isPdf      = state.mode === 'pdf';
-  const modeIcon   = isVideo ? '🎬' : isAudio ? '🎧' : isPdf ? '📄' : isReading ? '📖' : '✍️';
-  const rewardBase = isVideo ? 8 : isAudio ? 6 : isPdf ? 5 : isReading ? 5 : 25;
-  const intervalLabel = isVideo || isAudio || isPdf ? '30s' : isReading ? '30s' : '5min';
+  const modeIcon   = isReading ? '📖' : '✍️';
   const remaining  = Math.max(0, state.maxWindowSec - state.sessionElapsedSec);
   const remMin     = Math.floor(remaining / 60);
   const remSec     = fmt2(remaining % 60);
@@ -172,7 +167,7 @@ export const ReadingScoreHUD: React.FC<Props> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, alignItems: 'center' }}>
               {!state.isPaused ? (
                 <span style={{ color: levelColor, fontWeight: 900 }}>
-                  +{rewardBase} in {state.nextRewardInSec}s
+                  +{isReading ? 5 : 25} in {state.nextRewardInSec}s
                 </span>
               ) : (
                 <span style={{ color: '#f87171', fontWeight: 700 }}>Score paused</span>
