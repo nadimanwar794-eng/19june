@@ -1,7 +1,7 @@
 {
   "framework": null,
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/iic-app run build",
+  "buildCommand": "pnpm --filter @workspace/iic-app run build && cp -r artifacts/iic-app/dist/public/. public/",
   "outputDirectory": "public",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
