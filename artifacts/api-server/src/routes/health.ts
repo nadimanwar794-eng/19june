@@ -1,10 +1,11 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
+import { HealthCheckResponse } from "@workspace/api-zod";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const router: any = Router();
+const router: IRouter = Router();
 
-router.get("/healthz", (_req: any, res: any) => {
-  res.json({ status: "ok" });
+router.get("/healthz", (_req, res) => {
+  const data = HealthCheckResponse.parse({ status: "ok" });
+  res.json(data);
 });
 
 export default router;
